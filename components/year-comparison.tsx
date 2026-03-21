@@ -1,0 +1,345 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { getYear } from 'date-fns'
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ArrowLeft, Sun, Moon } from 'lucide-react'
+import { useTheme } from '@/components/theme-provider'
+
+interface EnergyYield {
+  id: number
+  date: string
+  kwh: number
+}
+
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: any[]
+  label?: string
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-blue-400 rounded-lg shadow-2xl p-4">
+        <p className="text-sm font-bold text-gray-900 dark:text-white mb-2">{label}</p>
+        {payload.map((entry, index) => (
+          <p key={index} className="text-sm text-gray-800 dark:text-gray-100">
+            <span style={{ color: entry.color }} className="font-semibold">{entry.name}: </span>
+            <span className="font-bold text-gray-900 dark:text-white">{entry.value.toFixed(2)}</span>
+          </p>
+        ))}
+      </div>
+    )
+  }
+  return null
+}
+
+interface YearComparisonProps {
+  onBack: () => void
+}
+
+export default function YearComparison({ onBack }: YearComparisonProps) {
+  const { theme, toggleTheme } = useTheme()
+  const [allYields, setAllYields] = useState<EnergyYield[]>([])
+  const [loading, setLoading] = useState(true)
+  const [abschlag, setAbschlag] = useState<number>(0)
+  const [einspeiseverguetung, setEinspeiseverguetung] = useState<number>(0)
+
+  useEffect(() => {
+    fetchAllYields()
+    
+    const savedAbschlag = localStorage.getItem('abschlag')
+    const savedEinspeise = localStorage.getItem('einspeiseverguetung')
+    if (savedAbschlag) setAbschlag(parseFloat(savedAbschlag))
+    if (savedEinspeise) setEinspeiseverguetung(parseFloat(savedEinspeise))
+  }, [])
+
+  const fetchAllYields = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch(`/api/yields`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        setAllYields(Array.isArray(data) ? data : [])
+      }
+    } catch (error) {
+      console.error('Error fetching yields:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAbschlagChange = (value: string) => {
+    const num = parseFloat(value) || 0
+    setAbschlag(num)
+    localStorage.setItem('abschlag', num.toString())
+  }
+
+  const handleEinspeiseChange = (value: string) => {
+    const num = parseFloat(value) || 0
+    setEinspeiseverguetung(num)
+    localStorage.setItem('einspeiseverguetung', num.toString())
+  }
+
+  const getYearlyData = () => {
+    const yearMap = new Map<number, { total: number, count: number, months: Set<number> }>()
+    
+    allYields.forEach(y => {
+      const date = new Date(y.date)
+      const year = getYear(date)
+      const month = date.getMonth()
+      const existing = yearMap.get(year) || { total: 0, count: 0, months: new Set<number>() }
+      existing.months.add(month)
+      yearMap.set(year, {
+        total: existing.total + y.kwh,
+        count: existing.count + 1,
+        months: existing.months
+      })
+    })
+
+    const years = Array.from(yearMap.entries())
+      .map(([year, data]) => {
+        const monthsWithData = data.months.size
+        const yearlyAbschlag = abschlag * monthsWithData
+        return {
+          year,
+          total: data.total,
+          average: data.count > 0 ? data.total / data.count : 0,
+          daysWithData: data.count,
+          monthsWithData: monthsWithData,
+          einnahmen: (data.total * einspeiseverguetung) / 100,
+          bilanz: ((data.total * einspeiseverguetung) / 100) - yearlyAbschlag
+        }
+      })
+      .sort((a, b) => a.year - b.year)
+
+    return years
+  }
+
+  const getMonthlyComparisonData = () => {
+    const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+    const yearMonthMap = new Map<string, Map<number, number>>()
+
+    allYields.forEach(y => {
+      const date = new Date(y.date)
+      const year = getYear(date)
+      const month = date.getMonth()
+      
+      if (!yearMonthMap.has(year.toString())) {
+        yearMonthMap.set(year.toString(), new Map())
+      }
+      
+      const yearData = yearMonthMap.get(year.toString())!
+      yearData.set(month, (yearData.get(month) || 0) + y.kwh)
+    })
+
+    return months.map((monthName, monthIndex) => {
+      const dataPoint: any = { month: monthName }
+      
+      yearMonthMap.forEach((monthData, year) => {
+        dataPoint[year] = monthData.get(monthIndex) || 0
+      })
+      
+      return dataPoint
+    })
+  }
+
+  const yearlyData = getYearlyData()
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 p-6 transition-colors">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="icon" onClick={onBack}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Jahresvergleich</h1>
+          </div>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={toggleTheme}
+            className="transition-transform hover:scale-110"
+            title={theme === 'dark' ? 'Hell-Modus' : 'Dunkel-Modus'}
+          >
+            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </Button>
+        </div>
+
+        {/* Cost Calculation Inputs */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Kostenberechnung</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                  Abschlag pro Monat (€)
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={abschlag}
+                  onChange={(e) => handleAbschlagChange(e.target.value)}
+                  placeholder="z.B. 150.00"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                  Einspeisevergütung (Cent/kWh)
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={einspeiseverguetung}
+                  onChange={(e) => handleEinspeiseChange(e.target.value)}
+                  placeholder="z.B. 8.20"
+                />
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
+              Formel: Bilanz = Einnahmen - Vorauszahlung | Positiv = Gewinn (Rückzahlung an dich) | Negativ = Nachzahlung (du zahlst)
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Year Comparison Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Jahresübersicht</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b-2 border-gray-300 dark:border-gray-600">
+                    <th className="text-left p-3 font-semibold text-gray-900 dark:text-white">Jahr</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Summe (kWh)</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Durchschnitt (kWh/Tag)</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Tage</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Monate</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Einnahmen (€)</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Bilanz (€)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {yearlyData.map((data) => (
+                    <tr 
+                      key={data.year}
+                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      <td className="p-3 font-medium text-gray-900 dark:text-white">{data.year}</td>
+                      <td className="p-3 text-right text-gray-700 dark:text-gray-300">
+                        {data.total.toFixed(2)}
+                      </td>
+                      <td className="p-3 text-right text-gray-700 dark:text-gray-300">
+                        {data.average.toFixed(2)}
+                      </td>
+                      <td className="p-3 text-right text-gray-700 dark:text-gray-300">
+                        {data.daysWithData}
+                      </td>
+                      <td className="p-3 text-right text-gray-700 dark:text-gray-300">
+                        {data.monthsWithData}
+                      </td>
+                      <td className="p-3 text-right text-gray-700 dark:text-gray-300">
+                        {data.einnahmen.toFixed(2)}
+                      </td>
+                      <td className={`p-3 text-right font-semibold ${
+                        data.bilanz >= 0 
+                          ? 'text-green-600 dark:text-green-400' 
+                          : 'text-red-600 dark:text-red-400'
+                      }`}>
+                        {data.bilanz >= 0 ? '+' : ''}{data.bilanz.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Comparison Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Total Production Comparison */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Jahresproduktion Vergleich</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={yearlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                  <XAxis dataKey="year" stroke="#6b7280" className="dark:stroke-gray-400" />
+                  <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ color: '#6b7280' }} />
+                  <Bar dataKey="total" fill="#3b82f6" name="Summe (kWh)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Financial Comparison */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Finanzvergleich</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={yearlyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                  <XAxis dataKey="year" stroke="#6b7280" className="dark:stroke-gray-400" />
+                  <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ color: '#6b7280' }} />
+                  <Bar dataKey="einnahmen" fill="#10b981" name="Einnahmen (€)" />
+                  <Bar dataKey="bilanz" fill="#3b82f6" name="Bilanz (€)" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Monthly Comparison Across Years */}
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Monatsvergleich über alle Jahre</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={getMonthlyComparisonData()}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                  <XAxis dataKey="month" stroke="#6b7280" className="dark:stroke-gray-400" />
+                  <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ color: '#6b7280' }} />
+                  {Array.from(new Set(allYields.map(y => getYear(new Date(y.date))))).sort().map((year, index) => {
+                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
+                    return (
+                      <Line 
+                        key={year}
+                        type="monotone" 
+                        dataKey={year.toString()} 
+                        stroke={colors[index % colors.length]} 
+                        strokeWidth={2} 
+                        name={year.toString()}
+                      />
+                    )
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}

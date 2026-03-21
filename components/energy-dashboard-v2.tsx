@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { format, getMonth, getYear, getDaysInMonth } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -9,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ChevronLeft, ChevronRight, Sun, Moon, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sun, Moon, Upload, BarChart3, Download } from 'lucide-react'
 import { useTheme } from '@/components/theme-provider'
 
 interface EnergyYield {
@@ -89,6 +90,7 @@ export default function EnergyDashboard() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [importing, setImporting] = useState(false)
   const [yearSelectorOpen, setYearSelectorOpen] = useState(false)
+  const router = useRouter()
 
   const currentYear = getYear(currentDate)
   const currentMonth = getMonth(currentDate)
@@ -342,6 +344,14 @@ export default function EnergyDashboard() {
           <div className="flex items-center gap-3">
             <Button 
               variant="outline"
+              onClick={() => router.push('/vergleich')}
+              className="flex items-center gap-2"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Jahresvergleich
+            </Button>
+            <Button 
+              variant="outline"
               onClick={() => setImportDialogOpen(true)}
               className="flex items-center gap-2"
             >
@@ -436,10 +446,10 @@ export default function EnergyDashboard() {
             <CardContent className="pt-6">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="yearly">Jahresübersicht</TabsTrigger>
-                  <TabsTrigger value="statistics">Statistik</TabsTrigger>
+                  <TabsTrigger value="yearly">Jahresübersicht</TabsTrigger>                  
                   <TabsTrigger value="monthly">Monatsertrag</TabsTrigger>
                   <TabsTrigger value="daily">Tagesertrag</TabsTrigger>
+                  <TabsTrigger value="statistics">Statistik</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="yearly" className="space-y-4">
