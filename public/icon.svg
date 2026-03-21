@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="128" fill="#3b82f6"/>
+  <circle cx="256" cy="200" r="60" fill="#fbbf24" stroke="#f59e0b" stroke-width="8"/>
+  <path d="M256 140 L256 100 M256 300 L256 260 M196 200 L156 200 M356 200 L316 200 M206 150 L176 120 M336 150 L366 120 M206 250 L176 280 M336 250 L366 280" stroke="#fbbf24" stroke-width="12" stroke-linecap="round"/>
+  <path d="M180 320 L332 320 L300 420 L212 420 Z" fill="#10b981" stroke="#059669" stroke-width="6"/>
+  <text x="256" y="470" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="white" text-anchor="middle">kWh</text>
+</svg>

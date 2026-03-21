@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ChevronLeft, ChevronRight, Sun, Moon, Upload, BarChart3, Download } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sun, Moon, Upload, BarChart3, Download, FileText, FileSpreadsheet, File } from 'lucide-react'
 import { useTheme } from '@/components/theme-provider'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 
 interface EnergyYield {
   id: number
@@ -90,6 +91,7 @@ export default function EnergyDashboard() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [importing, setImporting] = useState(false)
   const [yearSelectorOpen, setYearSelectorOpen] = useState(false)
+  const [showHeatmap, setShowHeatmap] = useState(false)
   const router = useRouter()
 
   const currentYear = getYear(currentDate)
@@ -231,6 +233,90 @@ export default function EnergyDashboard() {
     }
   }
 
+  const handleExportCSV = () => {
+    const sortedYields = [...allYields].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    )
+    
+    const csvContent = sortedYields.map(y => {
+      const date = new Date(y.date)
+      const formattedDate = format(date, 'dd.MM.yyyy')
+      return `${formattedDate},${y.kwh}`
+    }).join('\n')
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `solarertrag_export_${format(new Date(), 'yyyy-MM-dd')}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const handleExportPDF = () => {
+    const sortedYields = [...allYields].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    )
+    
+    let html = `
+      <html>
+        <head>
+          <title>Solarertrag Export</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { color: #1e40af; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #3b82f6; color: white; }
+            tr:nth-child(even) { background-color: #f2f2f2; }
+            .summary { background-color: #dbeafe; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+          </style>
+        </head>
+        <body>
+          <h1>Solarertrag Export</h1>
+          <div class="summary">
+            <h3>Zusammenfassung</h3>
+            <p><strong>Gesamt kWh:</strong> ${getCO2Savings().totalKwh.toFixed(2)} kWh</p>
+            <p><strong>CO₂-Einsparung:</strong> ${getCO2Savings().co2Saved.toFixed(2)} kg</p>
+            <p><strong>Bäume-Äquivalent:</strong> ${getCO2Savings().treesEquivalent.toFixed(1)} Bäume</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>kWh</th>
+              </tr>
+            </thead>
+            <tbody>
+    `
+    
+    sortedYields.forEach(y => {
+      const date = new Date(y.date)
+      const formattedDate = format(date, 'dd.MM.yyyy')
+      html += `<tr><td>${formattedDate}</td><td>${y.kwh}</td></tr>`
+    })
+    
+    html += `
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `
+    
+    const printWindow = window.open('', '', 'height=600,width=800')
+    if (printWindow) {
+      printWindow.document.write(html)
+      printWindow.document.close()
+      printWindow.focus()
+      setTimeout(() => {
+        printWindow.print()
+        printWindow.close()
+      }, 250)
+    }
+  }
+
   const getDayData = (): DayData[] => {
     const daysInMonth = getDaysInMonth(currentDate)
     const monthYields = yields.filter((y) => {
@@ -327,6 +413,79 @@ export default function EnergyDashboard() {
     })
   }
 
+  const getCO2Savings = () => {
+    const totalKwh = yields.reduce((sum, y) => sum + y.kwh, 0)
+    const co2PerKwh = 0.485
+    const co2Saved = totalKwh * co2PerKwh
+    const treesEquivalent = co2Saved / 22
+    
+    return {
+      totalKwh,
+      co2Saved,
+      treesEquivalent
+    }
+  }
+
+  const getMissingDays = () => {
+    const daysInMonth = getDaysInMonth(currentDate)
+    const existingDays = new Set(
+      yields.map(y => new Date(y.date).getDate())
+    )
+    
+    const missing = []
+    for (let day = 1; day <= daysInMonth; day++) {
+      if (!existingDays.has(day)) {
+        missing.push(day)
+      }
+    }
+    return missing
+  }
+
+  const getYearHeatmapData = () => {
+    const heatmapData = []
+    const yearYields = yields
+    
+    const yieldMap = new Map<string, number>()
+    yearYields.forEach(y => {
+      const dateKey = format(new Date(y.date), 'yyyy-MM-dd')
+      yieldMap.set(dateKey, y.kwh)
+    })
+    
+    const values = yearYields.map(y => y.kwh).filter(v => v > 0)
+    const min = values.length > 0 ? Math.min(...values) : 0
+    const max = values.length > 0 ? Math.max(...values) : 0
+    
+    for (let month = 0; month < 12; month++) {
+      const daysInMonth = getDaysInMonth(new Date(currentYear, month))
+      const monthData = []
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(currentYear, month, day)
+        const dateKey = format(date, 'yyyy-MM-dd')
+        const kwh = yieldMap.get(dateKey) || null
+        
+        let color = 'bg-gray-100 dark:bg-gray-700'
+        if (kwh !== null) {
+          const normalized = max > min ? (kwh - min) / (max - min) : 0.5
+          if (normalized < 0.2) color = 'bg-red-200'
+          else if (normalized < 0.4) color = 'bg-orange-200'
+          else if (normalized < 0.6) color = 'bg-yellow-200'
+          else if (normalized < 0.8) color = 'bg-lime-200'
+          else color = 'bg-green-300'
+        }
+        
+        monthData.push({ day, kwh, color, date: dateKey })
+      }
+      
+      heatmapData.push({
+        month: format(new Date(currentYear, month), 'MMM', { locale: de }),
+        days: monthData
+      })
+    }
+    
+    return heatmapData
+  }
+
   const dayData = getDayData()
 
   const changeMonth = (delta: number) => {
@@ -351,13 +510,41 @@ export default function EnergyDashboard() {
               Jahresvergleich
             </Button>
             <Button 
+              variant={showHeatmap ? "default" : "outline"}
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              className="flex items-center gap-2"
+            >
+              Heatmap {showHeatmap ? 'Aus' : 'An'}
+            </Button>
+            <Button 
               variant="outline"
               onClick={() => setImportDialogOpen(true)}
               className="flex items-center gap-2"
             >
               <Upload className="h-4 w-4" />
-              CSV Import
+              Import
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <Button 
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={handleExportCSV}>
+                  <File className="h-4 w-4 mr-2 inline" />
+                  CSV Export
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportPDF}>
+                  <FileText className="h-4 w-4 mr-2 inline" />
+                  PDF Export (Drucken)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button 
               variant="outline" 
               size="icon" 
@@ -374,6 +561,80 @@ export default function EnergyDashboard() {
           <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg">
             {error}
           </div>
+        )}
+
+        {/* Missing Days Warning */}
+        {getMissingDays().length > 0 && (
+          <Card className="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="text-4xl">⚠️</div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-orange-800 dark:text-orange-300">Fehlende Tage in {format(currentDate, 'MMMM', { locale: de })}</h3>
+                  <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
+                    {getMissingDays().length} Tage
+                  </p>
+                  <p className="text-xs text-orange-700 dark:text-orange-400 mt-1">
+                    {getMissingDays().slice(0, 5).join(', ')}{getMissingDays().length > 5 ? '...' : ''}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Heatmap View */}
+        {showHeatmap && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Jahres-Heatmap {currentYear}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {getYearHeatmapData().map((monthData, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className="w-12 text-xs font-semibold text-gray-600 dark:text-gray-400">
+                      {monthData.month}
+                    </div>
+                    <div className="flex-1 flex gap-1 flex-wrap">
+                      {monthData.days.map((dayData, dayIdx) => (
+                        <div
+                          key={dayIdx}
+                          className={`w-3 h-3 rounded-sm ${dayData.color} cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all`}
+                          title={`${dayData.date}: ${dayData.kwh !== null ? dayData.kwh.toFixed(2) + ' kWh' : 'Keine Daten'}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Legende:</span>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-gray-100 dark:bg-gray-700 rounded-sm border border-gray-300 dark:border-gray-600"></div>
+                  <span>Keine Daten</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-red-200 rounded-sm"></div>
+                  <span>Niedrig</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-orange-200 rounded-sm"></div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-yellow-200 rounded-sm"></div>
+                  <span>Mittel</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-lime-200 rounded-sm"></div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-green-300 rounded-sm"></div>
+                  <span>Hoch</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Main Layout: Calendar Left, Charts Right */}
@@ -403,39 +664,71 @@ export default function EnergyDashboard() {
                     {day}
                   </div>
                 ))}
-                {dayData.map((d) => (
-                  <button
-                    key={d.day}
-                    onClick={() => handleDayClick(d.day)}
-                    className={`
-                      aspect-square rounded p-1 text-xs font-medium transition-all
-                      ${d.color} dark:opacity-90
-                      hover:scale-110 hover:shadow-md hover:z-10
-                      flex flex-col items-center justify-center
-                    `}
-                  >
-                    <div className="text-gray-700 dark:text-gray-900 font-bold">{d.day}</div>
-                    {d.kwh !== null && (
-                      <div className="text-[10px] text-gray-900 dark:text-gray-950 font-semibold">
-                        {d.kwh.toFixed(0)}
+                {dayData.map((d) => {
+                  const isUnusual = d.kwh !== null && (d.kwh > 100 || d.kwh < 0)
+                  const isMissing = d.kwh === null
+                  
+                  return (
+                    <button
+                      key={d.day}
+                      onClick={() => handleDayClick(d.day)}
+                      className={`
+                        aspect-square rounded p-1 text-xs font-medium transition-all
+                        ${isMissing ? 'bg-gray-200 dark:bg-gray-700 border-2 border-dashed border-gray-400 dark:border-gray-500' : d.color}
+                        ${isUnusual ? 'ring-2 ring-red-500 dark:ring-red-400' : ''}
+                        dark:opacity-90
+                        hover:scale-110 hover:shadow-md hover:z-10
+                        active:scale-95
+                        touch-manipulation
+                        flex flex-col items-center justify-center
+                        relative
+                      `}
+                      title={isMissing ? 'Keine Daten' : isUnusual ? 'Ungewöhnlicher Wert!' : ''}
+                    >
+                      <div className={`font-bold ${isMissing ? 'text-gray-500 dark:text-gray-400' : 'text-gray-700 dark:text-gray-900'}`}>
+                        {d.day}
                       </div>
-                    )}
-                  </button>
-                ))}
+                      {d.kwh !== null && (
+                        <div className="text-[10px] text-gray-900 dark:text-gray-950 font-semibold">
+                          {d.kwh.toFixed(0)}
+                          {isUnusual && <span className="text-red-600">!</span>}
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2 text-xs dark:text-gray-300">
-                <span className="font-medium">Legende:</span>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-red-200 rounded"></div>
-                  <span>Niedrig</span>
+              <div className="mt-4 space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs dark:text-gray-300">
+                  <span className="font-medium">Legende:</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-red-200 rounded"></div>
+                    <span>Niedrig</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-orange-200 rounded"></div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-yellow-200 rounded"></div>
+                    <span>Mittel</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-lime-200 rounded"></div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-green-300 rounded"></div>
+                    <span>Hoch</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-yellow-200 rounded"></div>
-                  <span>Mittel</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-green-300 rounded"></div>
-                  <span>Hoch</span>
+                <div className="flex flex-wrap items-center gap-2 text-xs dark:text-gray-300">
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-gray-200 dark:bg-gray-700 border-2 border-dashed border-gray-400 rounded"></div>
+                    <span>Fehlend</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-3 bg-yellow-200 ring-2 ring-red-500 rounded"></div>
+                    <span>Ungewöhnlich</span>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -601,6 +894,24 @@ export default function EnergyDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* CO2 Savings Card */}
+        <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="text-4xl">🌱</div>
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-green-800 dark:text-green-300">CO₂-Einsparung {currentYear}</h3>
+                <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                  {getCO2Savings().co2Saved.toFixed(0)} kg
+                </p>
+                <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                  ≈ {getCO2Savings().treesEquivalent.toFixed(1)} Bäume gepflanzt | {getCO2Savings().totalKwh.toFixed(0)} kWh produziert
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Data Entry Dialog */}

@@ -1,0 +1,40 @@
+{
+  "name": "Solarertrag Tracker",
+  "short_name": "Solar Tracker",
+  "description": "Verfolge deinen täglichen Solarertrag und CO₂-Einsparung",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Jahresvergleich",
+      "short_name": "Vergleich",
+      "description": "Öffne den Jahresvergleich",
+      "url": "/vergleich",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
