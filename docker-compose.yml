@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  solar-tracker:
+    build: .
+    container_name: solar-tracker
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./prisma:/app/prisma
+      - solar-data:/app/prisma
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:./prisma/dev.db
+    restart: unless-stopped
+
+volumes:
+  solar-data:
