@@ -3,6 +3,7 @@ services:
   mariadb:
     image: mariadb:11-alpine
     container_name: solar-mariadb
+    command: --bind-address=0.0.0.0
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD=solar123

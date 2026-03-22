@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const dateObj = new Date(date)
-    dateObj.setHours(0, 0, 0, 0)
+    dateObj.setUTCHours(0, 0, 0, 0)
 
     const existingYield = await prisma.energyYield.findUnique({
       where: { date: dateObj },

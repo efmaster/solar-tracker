@@ -145,7 +145,7 @@ export default function EnergyDashboard() {
   }
 
   const handleDayClick = (day: number) => {
-    const clickedDate = new Date(currentYear, currentMonth, day)
+    const clickedDate = new Date(Date.UTC(currentYear, currentMonth, day))
     setSelectedDate(clickedDate)
     
     const existingYield = yields.find(
