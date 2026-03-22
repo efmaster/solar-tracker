@@ -36,14 +36,14 @@ COPY package*.json ./
 # Install only production dependencies
 RUN npm ci --only=production
 
+# Copy Prisma schema and generated client from builder
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
 # Copy built application from builder
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/prisma ./prisma
-
-# Create database directory
-RUN mkdir -p /app/prisma
 
 # Expose port
 EXPOSE 3000
