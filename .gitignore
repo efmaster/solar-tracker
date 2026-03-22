@@ -19,6 +19,8 @@
 
 # production
 /build
+/.vscode
+/.windsurf
 
 # misc
 .DS_Store
