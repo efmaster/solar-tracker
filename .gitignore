@@ -41,3 +41,15 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# Database files
+*.db
+*.db-journal
+/prisma/*.db
+/prisma/*.db-journal
+
+# Documentation helper files (not needed in repo)
+GITHUB-DESCRIPTION*.txt
+LICENSE-GUIDE.md
+GITHUB-VISIBILITY.md
+GPL-INFO.md
