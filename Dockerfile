@@ -48,9 +48,12 @@ COPY --from=builder /app/public ./public
 # Expose port
 EXPOSE 3000
 
+# Create data directory for database
+RUN mkdir -p /data
+
 # Set environment variables
 ENV NODE_ENV=production
-ENV DATABASE_URL="file:./prisma/dev.db"
+ENV DATABASE_URL="file:/data/dev.db"
 
 # Initialize database and start application
 CMD npx prisma db push && npm start

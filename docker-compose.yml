@@ -1,18 +1,14 @@
 version: '3.8'
-
 services:
   solar-tracker:
-    build: .
-    container_name: solar-tracker
+    image: ghcr.io/efmaster/solar-tracker:latest
+    container_name: solartracker
+    restart: unless-stopped
+    
     ports:
-      - "3000:3000"
+      - "3117:3000"
     volumes:
-      - ./prisma:/app/prisma
-      - solar-data:/app/prisma
+      - /volume1/docker/solar-tracker:/data
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=file:./prisma/dev.db
-    restart: unless-stopped
-
-volumes:
-  solar-data:
+      - DATABASE_URL=file:/data/dev.db
