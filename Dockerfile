@@ -10,14 +10,17 @@ COPY package*.json ./
 # Install ALL dependencies (including devDependencies for build)
 RUN npm ci
 
-# Copy application files
-COPY . .
+# Copy prisma schema first
+COPY prisma ./prisma
 
 # Set DATABASE_URL for Prisma generation (build-time only)
 ENV DATABASE_URL="file:./prisma/dev.db"
 
 # Generate Prisma Client
 RUN npx prisma generate
+
+# Copy rest of application files
+COPY . .
 
 # Build Next.js application
 RUN npm run build
