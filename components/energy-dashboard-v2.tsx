@@ -1,68 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, type ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, getMonth, getYear, getDaysInMonth } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ChevronLeft, ChevronRight, Sun, Moon, Upload, BarChart3, Download, FileText, FileSpreadsheet, File } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sun, Moon, Upload, BarChart3, Download, FileText, File } from 'lucide-react'
 import { useTheme } from '@/components/theme-provider'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
-
-interface EnergyYield {
-  id: number
-  date: string
-  kwh: number
-}
-
-interface ImportResult {
-  imported: number
-  updated: number
-  errors: number
-  errorDetails: string[]
-}
-
-interface CustomTooltipProps {
-  active?: boolean
-  payload?: any[]
-  label?: string
-}
-
-const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
-  if (active && payload && payload.length) {
-    const monthNames: { [key: string]: string } = {
-      'Jan': 'Januar', 'Feb': 'Februar', 'Mär': 'März', 'Apr': 'April',
-      'Mai': 'Mai', 'Jun': 'Juni', 'Jul': 'Juli', 'Aug': 'August',
-      'Sep': 'September', 'Okt': 'Oktober', 'Nov': 'November', 'Dez': 'Dezember'
-    }
-    
-    const displayLabel = monthNames[label as string] || (typeof label === 'number' ? `Tag: ${label}` : label)
-    
-    return (
-      <div className="bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-blue-400 rounded-lg shadow-2xl p-4">
-        <p className="text-sm font-bold text-gray-900 dark:text-white mb-2">{displayLabel}</p>
-        {payload.map((entry, index) => (
-          <p key={index} className="text-sm text-gray-800 dark:text-gray-100">
-            <span style={{ color: entry.color }} className="font-semibold">{entry.name}: </span>
-            <span className="font-bold text-gray-900 dark:text-white">{entry.value.toFixed(2)} kWh</span>
-          </p>
-        ))}
-      </div>
-    )
-  }
-  return null
-}
-
-interface DayData {
-  day: number
-  kwh: number | null
-  color: string
-}
+import { EnergyDashboardCalendar } from '@/components/energy-dashboard-calendar'
+import { EnergyDashboardHeatmap } from '@/components/energy-dashboard-heatmap'
+import { EnergyDashboardCharts } from '@/components/energy-dashboard-charts'
+import { EnergyDashboardImportDialog } from '@/components/energy-dashboard-import-dialog'
+import { type DayData, type EnergyYield, type ImportResult } from '@/components/energy-dashboard-types'
 
 const getColorForValue = (value: number | null, min: number, max: number): string => {
   if (value === null) return 'bg-gray-100 dark:bg-gray-700'
@@ -94,14 +47,17 @@ export default function EnergyDashboard() {
   const [showHeatmap, setShowHeatmap] = useState(false)
   const router = useRouter()
 
-  const currentYear = getYear(currentDate)
-  const currentMonth = getMonth(currentDate)
-  
-  const yields = allYields.filter(y => getYear(new Date(y.date)) === currentYear)
-  
-  const getAvailableYears = () => {
+  const currentYear = useMemo(() => getYear(currentDate), [currentDate])
+  const currentMonth = useMemo(() => getMonth(currentDate), [currentDate])
+
+  const yields = useMemo(
+    () => allYields.filter((y) => getYear(new Date(y.date)) === currentYear),
+    [allYields, currentYear]
+  )
+
+  const availableYears = useMemo(() => {
     const years = new Set<number>()
-    allYields.forEach(y => {
+    allYields.forEach((y) => {
       years.add(getYear(new Date(y.date)))
     })
     const yearArray = Array.from(years).sort((a, b) => b - a)
@@ -110,7 +66,7 @@ export default function EnergyDashboard() {
       yearArray.sort((a, b) => b - a)
     }
     return yearArray
-  }
+  }, [allYields, currentYear])
 
   useEffect(() => {
     fetchAllYields()
@@ -157,25 +113,37 @@ export default function EnergyDashboard() {
 
   const handleSave = async () => {
     if (!selectedDate) return
-    
+
+    const kwh = parseFloat(kwhValue)
+    if (Number.isNaN(kwh)) {
+      setError('Ungültiger kWh-Wert.')
+      return
+    }
+
     try {
       const response = await fetch('/api/yields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: selectedDate.toISOString(),
-          kwh: parseFloat(kwhValue),
+          kwh,
         }),
       })
 
-      if (response.ok) {
-        await fetchAllYields()
-        setDialogOpen(false)
-        setKwhValue('')
-        setSelectedDate(null)
+      if (!response.ok) {
+        const result = await response.json().catch(() => null)
+        setError(result?.error || 'Fehler beim Speichern des Ertrags.')
+        return
       }
+
+      await fetchAllYields()
+      setDialogOpen(false)
+      setKwhValue('')
+      setSelectedDate(null)
+      setError(null)
     } catch (error) {
       console.error('Error saving yield:', error)
+      setError('Fehler beim Speichern des Ertrags.')
     }
   }
 
@@ -188,35 +156,72 @@ export default function EnergyDashboard() {
 
     try {
       const text = await file.text()
-      const lines = text.split('\n').filter(line => line.trim())
-      
-      const data = lines.map(line => {
+      const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+      const parsed: { date: string; kwh: number }[] = []
+      const errors: string[] = []
+
+      lines.forEach((line, index) => {
         const [dateStr, kwhStr] = line.split(',')
-        const [day, month, year] = dateStr.trim().split('.')
-        const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-        
-        return {
-          date: isoDate,
-          kwh: parseFloat(kwhStr.trim())
+        if (!dateStr || !kwhStr) {
+          errors.push(`Zeile ${index + 1}: Ungültiges Format`)
+          return
         }
+
+        const [day, month, year] = dateStr.trim().split('.')
+        if (!day || !month || !year) {
+          errors.push(`Zeile ${index + 1}: Ungültiges Datum`)
+          return
+        }
+
+        const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+        const kwh = parseFloat(kwhStr.replace(',', '.').trim())
+        const dateObj = new Date(isoDate)
+
+        if (isNaN(dateObj.getTime())) {
+          errors.push(`Zeile ${index + 1}: Ungültiges Datum ${dateStr}`)
+          return
+        }
+
+        if (Number.isNaN(kwh)) {
+          errors.push(`Zeile ${index + 1}: Ungültiger kWh-Wert`)
+          return
+        }
+
+        parsed.push({ date: isoDate, kwh })
       })
+
+      if (parsed.length === 0) {
+        setImportResult({
+          imported: 0,
+          updated: 0,
+          errors: errors.length || 1,
+          errorDetails: errors.length > 0 ? errors : ['Keine gültigen Daten gefunden']
+        })
+        return
+      }
 
       const response = await fetch('/api/yields/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data }),
+        body: JSON.stringify({ data: parsed }),
       })
 
       if (response.ok) {
         const result = await response.json()
-        setImportResult(result)
+        setImportResult({
+          imported: result.imported,
+          updated: result.updated,
+          errors: result.errors + errors.length,
+          errorDetails: [...(result.errorDetails || []), ...errors],
+        })
         await fetchAllYields()
       } else {
+        const result = await response.json().catch(() => null)
         setImportResult({
           imported: 0,
           updated: 0,
           errors: 1,
-          errorDetails: ['Import fehlgeschlagen']
+          errorDetails: [result?.error || 'Import fehlgeschlagen', ...errors],
         })
       }
     } catch (error) {
@@ -278,9 +283,9 @@ export default function EnergyDashboard() {
           <h1>Solarertrag Export</h1>
           <div class="summary">
             <h3>Zusammenfassung</h3>
-            <p><strong>Gesamt kWh:</strong> ${getCO2Savings().totalKwh.toFixed(2)} kWh</p>
-            <p><strong>CO₂-Einsparung:</strong> ${getCO2Savings().co2Saved.toFixed(2)} kg</p>
-            <p><strong>Bäume-Äquivalent:</strong> ${getCO2Savings().treesEquivalent.toFixed(1)} Bäume</p>
+            <p><strong>Gesamt kWh:</strong> ${co2Savings.totalKwh.toFixed(2)} kWh</p>
+            <p><strong>CO₂-Einsparung:</strong> ${co2Savings.co2Saved.toFixed(2)} kg</p>
+            <p><strong>Bäume-Äquivalent:</strong> ${co2Savings.treesEquivalent.toFixed(1)} Bäume</p>
           </div>
           <table>
             <thead>
@@ -317,13 +322,15 @@ export default function EnergyDashboard() {
     }
   }
 
-  const getDayData = (): DayData[] => {
-    const daysInMonth = getDaysInMonth(currentDate)
-    const monthYields = yields.filter((y) => {
+  const monthYields = useMemo(() => {
+    return yields.filter((y) => {
       const yieldDate = new Date(y.date)
       return getMonth(yieldDate) === currentMonth && getYear(yieldDate) === currentYear
     })
+  }, [yields, currentMonth, currentYear])
 
+  const dayData = useMemo<DayData[]>(() => {
+    const daysInMonth = getDaysInMonth(currentDate)
     const values = monthYields.map((y) => y.kwh).filter((v) => v > 0)
     const min = values.length > 0 ? Math.min(...values) : 0
     const max = values.length > 0 ? Math.max(...values) : 0
@@ -331,16 +338,23 @@ export default function EnergyDashboard() {
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1
       const yieldData = monthYields.find((y) => new Date(y.date).getDate() === day)
-      const kwh = yieldData?.kwh || null
+      const kwh = yieldData?.kwh ?? null
       return {
         day,
         kwh,
         color: getColorForValue(kwh, min, max),
       }
     })
-  }
+  }, [monthYields, currentDate])
 
-  const getMonthlyChartData = () => {
+  const calendarCells = useMemo<(DayData | null)[]>(() => {
+    const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay()
+    const startOffset = (firstDayOfMonth + 6) % 7 // Monday-first week
+    const blankCells: (DayData | null)[] = Array.from({ length: startOffset }, () => null)
+    return blankCells.concat(dayData)
+  }, [currentYear, currentMonth, dayData])
+
+  const monthlyChartData = useMemo(() => {
     const months = [
       'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
       'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
@@ -354,19 +368,16 @@ export default function EnergyDashboard() {
       const total = monthYields.reduce((sum, y) => sum + y.kwh, 0)
       return { month, kwh: total }
     })
-  }
+  }, [yields, currentYear])
 
-  const getDailyChartData = () => {
-    const dayData = getDayData()
-    return dayData.map((d) => ({
-      tag: d.day,
-      kwh: d.kwh || 0,
-    }))
-  }
+  const dailyChartData = useMemo(
+    () => dayData.map((d) => ({ tag: d.day, kwh: d.kwh || 0 })),
+    [dayData]
+  )
 
-  const getYearlyLineChartData = () => {
+  const yearlyLineChartData = useMemo(() => {
     const data: { [key: string]: any } = {}
-    
+
     for (let month = 0; month < 12; month++) {
       const daysInMonth = getDaysInMonth(new Date(currentYear, month))
       for (let day = 1; day <= daysInMonth; day++) {
@@ -382,9 +393,9 @@ export default function EnergyDashboard() {
     })
 
     return Object.values(data).sort((a: any, b: any) => a.day - b.day)
-  }
+  }, [yields, currentYear])
 
-  const getMonthlyStatistics = () => {
+  const monthlyStatistics = useMemo(() => {
     const months = [
       'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
@@ -395,75 +406,74 @@ export default function EnergyDashboard() {
         const yieldDate = new Date(y.date)
         return getMonth(yieldDate) === index && getYear(yieldDate) === currentYear
       })
-      
+
       const total = monthYields.reduce((sum, y) => sum + y.kwh, 0)
       const daysWithData = monthYields.length
       const average = daysWithData > 0 ? total / daysWithData : 0
       const daysInMonth = getDaysInMonth(new Date(currentYear, index))
-      
+
       return {
         month,
         monthIndex: index,
-        total: total,
-        average: average,
-        daysWithData: daysWithData,
-        daysInMonth: daysInMonth,
-        coverage: daysInMonth > 0 ? (daysWithData / daysInMonth) * 100 : 0
+        total,
+        average,
+        daysWithData,
+        daysInMonth,
+        coverage: daysInMonth > 0 ? (daysWithData / daysInMonth) * 100 : 0,
       }
     })
-  }
+  }, [yields, currentYear])
 
-  const getCO2Savings = () => {
+  const co2Savings = useMemo(() => {
     const totalKwh = yields.reduce((sum, y) => sum + y.kwh, 0)
     const co2PerKwh = 0.485
     const co2Saved = totalKwh * co2PerKwh
     const treesEquivalent = co2Saved / 22
-    
+
     return {
       totalKwh,
       co2Saved,
-      treesEquivalent
+      treesEquivalent,
     }
-  }
+  }, [yields])
 
-  const getMissingDays = () => {
+  const missingDays = useMemo(() => {
     const daysInMonth = getDaysInMonth(currentDate)
-    const existingDays = new Set(
-      yields.map(y => new Date(y.date).getDate())
-    )
-    
-    const missing = []
+    const existingDays = new Set(monthYields.map((y) => new Date(y.date).getDate()))
+    const missing: number[] = []
+
     for (let day = 1; day <= daysInMonth; day++) {
       if (!existingDays.has(day)) {
         missing.push(day)
       }
     }
-    return missing
-  }
 
-  const getYearHeatmapData = () => {
-    const heatmapData = []
+    return missing
+  }, [monthYields, currentDate])
+
+  const yearHeatmapData = useMemo(() => {
+    const heatmapData: { month: string; days: { day: number; kwh: number | null; color: string; date: string }[] }[] = []
     const yearYields = yields
-    
+
     const yieldMap = new Map<string, number>()
-    yearYields.forEach(y => {
+    yearYields.forEach((y) => {
       const dateKey = format(new Date(y.date), 'yyyy-MM-dd')
       yieldMap.set(dateKey, y.kwh)
     })
-    
-    const values = yearYields.map(y => y.kwh).filter(v => v > 0)
+
+    const values = yearYields.map((y) => y.kwh).filter((v) => v > 0)
     const min = values.length > 0 ? Math.min(...values) : 0
     const max = values.length > 0 ? Math.max(...values) : 0
-    
+
     for (let month = 0; month < 12; month++) {
       const daysInMonth = getDaysInMonth(new Date(currentYear, month))
       const monthData = []
-      
+
       for (let day = 1; day <= daysInMonth; day++) {
         const date = new Date(currentYear, month, day)
         const dateKey = format(date, 'yyyy-MM-dd')
-        const kwh = yieldMap.get(dateKey) || null
-        
+        const kwh = yieldMap.get(dateKey) ?? null
+
         let color = 'bg-gray-100 dark:bg-gray-700'
         if (kwh !== null) {
           const normalized = max > min ? (kwh - min) / (max - min) : 0.5
@@ -473,20 +483,18 @@ export default function EnergyDashboard() {
           else if (normalized < 0.8) color = 'bg-lime-200'
           else color = 'bg-green-300'
         }
-        
+
         monthData.push({ day, kwh, color, date: dateKey })
       }
-      
+
       heatmapData.push({
         month: format(new Date(currentYear, month), 'MMM', { locale: de }),
-        days: monthData
+        days: monthData,
       })
     }
-    
-    return heatmapData
-  }
 
-  const dayData = getDayData()
+    return heatmapData
+  }, [yields, currentYear])
 
   const changeMonth = (delta: number) => {
     const newDate = new Date(currentDate)
@@ -495,7 +503,7 @@ export default function EnergyDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 p-6 transition-colors">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 p-6 transition-colors">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -564,7 +572,7 @@ export default function EnergyDashboard() {
         )}
 
         {/* Missing Days Warning */}
-        {getMissingDays().length > 0 && (
+        {missingDays.length > 0 && (
           <Card className="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -572,10 +580,10 @@ export default function EnergyDashboard() {
                 <div className="flex-1">
                   <h3 className="text-sm font-medium text-orange-800 dark:text-orange-300">Fehlende Tage in {format(currentDate, 'MMMM', { locale: de })}</h3>
                   <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                    {getMissingDays().length} Tage
+                    {missingDays.length} Tage
                   </p>
                   <p className="text-xs text-orange-700 dark:text-orange-400 mt-1">
-                    {getMissingDays().slice(0, 5).join(', ')}{getMissingDays().length > 5 ? '...' : ''}
+                    {missingDays.slice(0, 5).join(', ')}{missingDays.length > 5 ? '...' : ''}
                   </p>
                 </div>
               </div>
@@ -583,316 +591,35 @@ export default function EnergyDashboard() {
           </Card>
         )}
 
-        {/* Heatmap View */}
-        {showHeatmap && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Jahres-Heatmap {currentYear}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {getYearHeatmapData().map((monthData, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <div className="w-12 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                      {monthData.month}
-                    </div>
-                    <div className="flex-1 flex gap-1 flex-wrap">
-                      {monthData.days.map((dayData, dayIdx) => (
-                        <div
-                          key={dayIdx}
-                          className={`w-3 h-3 rounded-sm ${dayData.color} cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all`}
-                          title={`${dayData.date}: ${dayData.kwh !== null ? dayData.kwh.toFixed(2) + ' kWh' : 'Keine Daten'}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
-                <span className="font-medium">Legende:</span>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-gray-100 dark:bg-gray-700 rounded-sm border border-gray-300 dark:border-gray-600"></div>
-                  <span>Keine Daten</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-red-200 rounded-sm"></div>
-                  <span>Niedrig</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-orange-200 rounded-sm"></div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-yellow-200 rounded-sm"></div>
-                  <span>Mittel</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-lime-200 rounded-sm"></div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-green-300 rounded-sm"></div>
-                  <span>Hoch</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <EnergyDashboardHeatmap
+          showHeatmap={showHeatmap}
+          yearHeatmapData={yearHeatmapData}
+          currentYear={currentYear}
+        />
 
-        {/* Main Layout: Calendar Left, Charts Right */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Compact Calendar */}
-          <Card className="lg:col-span-1">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <Button variant="ghost" size="icon" onClick={() => changeMonth(-1)}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <button 
-                  onClick={() => setYearSelectorOpen(true)}
-                  className="text-lg font-semibold hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
-                >
-                  {format(currentDate, 'MMMM yyyy', { locale: de })}
-                </button>
-                <Button variant="ghost" size="icon" onClick={() => changeMonth(1)}>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-7 gap-1">
-                {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => (
-                  <div key={day} className="text-center text-xs font-semibold text-gray-600 dark:text-gray-400 pb-1">
-                    {day}
-                  </div>
-                ))}
-                {dayData.map((d) => {
-                  const isUnusual = d.kwh !== null && (d.kwh > 100 || d.kwh < 0)
-                  const isMissing = d.kwh === null
-                  
-                  return (
-                    <button
-                      key={d.day}
-                      onClick={() => handleDayClick(d.day)}
-                      className={`
-                        aspect-square rounded p-1 text-xs font-medium transition-all
-                        ${isMissing ? 'bg-gray-200 dark:bg-gray-700 border-2 border-dashed border-gray-400 dark:border-gray-500' : d.color}
-                        ${isUnusual ? 'ring-2 ring-red-500 dark:ring-red-400' : ''}
-                        dark:opacity-90
-                        hover:scale-110 hover:shadow-md hover:z-10
-                        active:scale-95
-                        touch-manipulation
-                        flex flex-col items-center justify-center
-                        relative
-                      `}
-                      title={isMissing ? 'Keine Daten' : isUnusual ? 'Ungewöhnlicher Wert!' : ''}
-                    >
-                      <div className={`font-bold ${isMissing ? 'text-gray-500 dark:text-gray-400' : 'text-gray-700 dark:text-gray-900'}`}>
-                        {d.day}
-                      </div>
-                      {d.kwh !== null && (
-                        <div className="text-[10px] text-gray-900 dark:text-gray-950 font-semibold">
-                          {d.kwh.toFixed(0)}
-                          {isUnusual && <span className="text-red-600">!</span>}
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="mt-4 space-y-2">
-                <div className="flex flex-wrap items-center gap-2 text-xs dark:text-gray-300">
-                  <span className="font-medium">Legende:</span>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-red-200 rounded"></div>
-                    <span>Niedrig</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-orange-200 rounded"></div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-yellow-200 rounded"></div>
-                    <span>Mittel</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-lime-200 rounded"></div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-green-300 rounded"></div>
-                    <span>Hoch</span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs dark:text-gray-300">
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-gray-200 dark:bg-gray-700 border-2 border-dashed border-gray-400 rounded"></div>
-                    <span>Fehlend</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-3 h-3 bg-yellow-200 ring-2 ring-red-500 rounded"></div>
-                    <span>Ungewöhnlich</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Tabbed Charts */}
-          <Card className="lg:col-span-2">
-            <CardContent className="pt-6">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="yearly">Jahresübersicht</TabsTrigger>                  
-                  <TabsTrigger value="monthly">Monatsertrag</TabsTrigger>
-                  <TabsTrigger value="daily">Tagesertrag</TabsTrigger>
-                  <TabsTrigger value="statistics">Statistik</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="yearly" className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Jahresübersicht {currentYear} - Alle Monate
-                  </h3>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={getYearlyLineChartData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                      <XAxis dataKey="day" stroke="#6b7280" className="dark:stroke-gray-400" />
-                      <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend wrapperStyle={{ color: '#6b7280' }} />
-                      <Line type="monotone" dataKey="Januar" stroke="#60a5fa" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="Februar" stroke="#a78bfa" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="März" stroke="#34d399" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="April" stroke="#f87171" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="Mai" stroke="#fb923c" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="Juni" stroke="#fbbf24" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="Juli" stroke="#4ade80" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="August" stroke="#22d3ee" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="September" stroke="#818cf8" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="Oktober" stroke="#fb7185" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="November" stroke="#f97316" strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="Dezember" stroke="#3b82f6" strokeWidth={1.5} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </TabsContent>
-
-                <TabsContent value="statistics" className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Monatsstatistik {currentYear}
-                  </h3>
-                  
-                  {/* Statistics Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b-2 border-gray-300 dark:border-gray-600">
-                          <th className="text-left p-2 font-semibold text-gray-900 dark:text-white">Monat</th>
-                          <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">Summe (kWh)</th>
-                          <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">Durchschnitt (kWh)</th>
-                          <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">Tage mit Daten</th>
-                          <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">Abdeckung</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {getMonthlyStatistics().map((stat, index) => (
-                          <tr 
-                            key={stat.month}
-                            className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                              index === currentMonth ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                            }`}
-                          >
-                            <td className="p-2 font-medium text-gray-900 dark:text-white">{stat.month}</td>
-                            <td className="p-2 text-right text-gray-700 dark:text-gray-300">
-                              {stat.total.toFixed(2)}
-                            </td>
-                            <td className="p-2 text-right text-gray-700 dark:text-gray-300">
-                              {stat.average.toFixed(2)}
-                            </td>
-                            <td className="p-2 text-right text-gray-700 dark:text-gray-300">
-                              {stat.daysWithData} / {stat.daysInMonth}
-                            </td>
-                            <td className="p-2 text-right text-gray-700 dark:text-gray-300">
-                              {stat.coverage.toFixed(0)}%
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
-                          <td className="p-2 text-gray-900 dark:text-white">Gesamt</td>
-                          <td className="p-2 text-right text-gray-900 dark:text-white">
-                            {getMonthlyStatistics().reduce((sum, s) => sum + s.total, 0).toFixed(2)}
-                          </td>
-                          <td className="p-2 text-right text-gray-900 dark:text-white">
-                            {(getMonthlyStatistics().reduce((sum, s) => sum + s.total, 0) / 
-                              Math.max(1, getMonthlyStatistics().reduce((sum, s) => sum + s.daysWithData, 0))).toFixed(2)}
-                          </td>
-                          <td className="p-2 text-right text-gray-900 dark:text-white">
-                            {getMonthlyStatistics().reduce((sum, s) => sum + s.daysWithData, 0)}
-                          </td>
-                          <td className="p-2 text-right text-gray-900 dark:text-white">-</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-
-                  {/* Comparison Chart */}
-                  <div className="mt-6">
-                    <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">
-                      Monatsvergleich: Durchschnitt vs. Summe
-                    </h4>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={getMonthlyStatistics()}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                        <XAxis 
-                          dataKey="month" 
-                          stroke="#6b7280" 
-                          className="dark:stroke-gray-400"
-                          angle={-45}
-                          textAnchor="end"
-                          height={80}
-                          tick={{ fontSize: 12 }}
-                        />
-                        <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{ color: '#6b7280' }} />
-                        <Bar dataKey="total" fill="#3b82f6" name="Summe (kWh)" />
-                        <Bar dataKey="average" fill="#10b981" name="Durchschnitt (kWh)" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="monthly" className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Monatsertrag {currentYear}
-                  </h3>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={getMonthlyChartData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                      <XAxis dataKey="month" stroke="#6b7280" className="dark:stroke-gray-400" />
-                      <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend wrapperStyle={{ color: '#6b7280' }} />
-                      <Bar dataKey="kwh" fill="#3b82f6" name="kWh" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </TabsContent>
-
-                <TabsContent value="daily" className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Tagesertrag - {format(currentDate, 'MMMM yyyy', { locale: de })}
-                  </h3>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <LineChart data={getDailyChartData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
-                      <XAxis dataKey="tag" stroke="#6b7280" className="dark:stroke-gray-400" />
-                      <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Legend wrapperStyle={{ color: '#6b7280' }} />
-                      <Line type="monotone" dataKey="kwh" stroke="#3b82f6" strokeWidth={2} name="kWh" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+          <EnergyDashboardCalendar
+            currentDate={currentDate}
+            calendarCells={calendarCells}
+            handleDayClick={handleDayClick}
+            changeMonth={changeMonth}
+            yearSelectorOpen={yearSelectorOpen}
+            setYearSelectorOpen={setYearSelectorOpen}
+            availableYears={availableYears}
+            currentMonth={currentMonth}
+            currentYear={currentYear}
+            setCurrentDate={setCurrentDate}
+          />
+          <EnergyDashboardCharts
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            currentYear={currentYear}
+            currentMonth={currentMonth}
+            yearlyLineChartData={yearlyLineChartData}
+            monthlyStatistics={monthlyStatistics}
+            monthlyChartData={monthlyChartData}
+            dailyChartData={dailyChartData}
+          />
         </div>
 
         {/* CO2 Savings Card */}
@@ -903,10 +630,10 @@ export default function EnergyDashboard() {
               <div className="flex-1">
                 <h3 className="text-sm font-medium text-green-800 dark:text-green-300">CO₂-Einsparung {currentYear}</h3>
                 <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                  {getCO2Savings().co2Saved.toFixed(0)} kg
+                  {co2Savings.co2Saved.toFixed(0)} kg
                 </p>
                 <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                  ≈ {getCO2Savings().treesEquivalent.toFixed(1)} Bäume gepflanzt | {getCO2Savings().totalKwh.toFixed(0)} kWh produziert
+                  ≈ {co2Savings.treesEquivalent.toFixed(1)} Bäume gepflanzt | {co2Savings.totalKwh.toFixed(0)} kWh produziert
                 </p>
               </div>
             </div>
@@ -941,7 +668,11 @@ export default function EnergyDashboard() {
               />
             </div>
             <div className="flex gap-2 pt-4">
-              <Button onClick={handleSave} className="flex-1">
+              <Button
+              onClick={handleSave}
+              disabled={!selectedDate || !kwhValue || Number.isNaN(parseFloat(kwhValue))}
+              className="flex-1"
+            >
                 Speichern
               </Button>
               <Button variant="outline" onClick={() => setDialogOpen(false)} className="flex-1">
@@ -960,7 +691,7 @@ export default function EnergyDashboard() {
             <DialogTitle>Jahr auswählen</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {getAvailableYears().map((year) => (
+            {availableYears.map((year) => (
               <button
                 key={year}
                 onClick={() => {
@@ -982,88 +713,14 @@ export default function EnergyDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* CSV Import Dialog */}
-      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent>
-          <DialogClose onClose={() => { setImportDialogOpen(false); setImportResult(null); }} />
-          <DialogHeader>
-            <DialogTitle>CSV Daten importieren</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                Format: <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">DD.MM.YYYY,KWH</code>
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mb-4">
-                Beispiel: 01.01.2017,25.5
-              </p>
-              <input
-                type="file"
-                accept=".csv,.txt"
-                onChange={handleFileImport}
-                disabled={importing}
-                className="block w-full text-sm text-gray-900 dark:text-white
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-md file:border-0
-                  file:text-sm file:font-semibold
-                  file:bg-blue-50 file:text-blue-700
-                  hover:file:bg-blue-100
-                  dark:file:bg-blue-900 dark:file:text-blue-300
-                  dark:hover:file:bg-blue-800
-                  cursor-pointer"
-              />
-            </div>
-
-            {importing && (
-              <div className="text-center py-4">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Importiere Daten...</p>
-              </div>
-            )}
-
-            {importResult && (
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 space-y-2">
-                <h4 className="font-semibold text-gray-900 dark:text-white">Import Ergebnis:</h4>
-                <div className="text-sm space-y-1">
-                  <p className="text-green-600 dark:text-green-400">
-                    ✓ {importResult.imported} neue Einträge importiert
-                  </p>
-                  <p className="text-blue-600 dark:text-blue-400">
-                    ↻ {importResult.updated} Einträge aktualisiert
-                  </p>
-                  {importResult.errors > 0 && (
-                    <p className="text-red-600 dark:text-red-400">
-                      ✗ {importResult.errors} Fehler
-                    </p>
-                  )}
-                </div>
-                {importResult.errorDetails.length > 0 && (
-                  <details className="mt-2">
-                    <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
-                      Fehlerdetails anzeigen
-                    </summary>
-                    <div className="mt-2 text-xs text-red-600 dark:text-red-400 max-h-32 overflow-y-auto">
-                      {importResult.errorDetails.map((error, i) => (
-                        <div key={i}>{error}</div>
-                      ))}
-                    </div>
-                  </details>
-                )}
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => { setImportDialogOpen(false); setImportResult(null); }}
-                className="flex-1"
-              >
-                Schließen
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EnergyDashboardImportDialog
+        importDialogOpen={importDialogOpen}
+        setImportDialogOpen={setImportDialogOpen}
+        handleFileImport={handleFileImport}
+        importing={importing}
+        importResult={importResult}
+        setImportResult={setImportResult}
+      />
     </div>
   )
 }
