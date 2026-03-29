@@ -12,6 +12,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
+    "types": ["vitest", "node"],
     "incremental": true,
     "plugins": [
       {

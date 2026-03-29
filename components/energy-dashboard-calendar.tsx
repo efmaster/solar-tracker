@@ -38,16 +38,17 @@ export function EnergyDashboardCalendar({
       <Card className="lg:col-span-1">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="icon" onClick={() => changeMonth(-1)}>
+            <Button aria-label="Vorheriger Monat" variant="ghost" size="icon" onClick={() => changeMonth(-1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <button
+              aria-label="Jahr auswählen"
               onClick={() => setYearSelectorOpen(true)}
               className="text-lg font-semibold hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
             >
               {format(currentDate, 'MMMM yyyy', { locale: de })}
             </button>
-            <Button variant="ghost" size="icon" onClick={() => changeMonth(1)}>
+            <Button aria-label="Nächster Monat" variant="ghost" size="icon" onClick={() => changeMonth(1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>

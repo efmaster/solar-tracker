@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseYieldBody, parseYearMonthParams, parseDateValue } from '@/lib/yield-validation'
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,22 +10,16 @@ export async function GET(request: NextRequest) {
 
     let whereClause = {}
 
-    if (year && month) {
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1)
-      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59)
-      whereClause = {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    if (year || month) {
+      const parsedParams = parseYearMonthParams(year, month)
+      if ('error' in parsedParams) {
+        return NextResponse.json({ error: parsedParams.error }, { status: 400 })
       }
-    } else if (year) {
-      const startDate = new Date(parseInt(year), 0, 1)
-      const endDate = new Date(parseInt(year), 11, 31, 23, 59, 59)
+
       whereClause = {
         date: {
-          gte: startDate,
-          lte: endDate,
+          gte: parsedParams.startDate,
+          lte: parsedParams.endDate,
         },
       }
     }
@@ -47,42 +42,56 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { date, kwh } = body
+    const parsed = parseYieldBody(body)
 
-    if (!date || kwh === undefined) {
-      return NextResponse.json(
-        { error: 'Date and kwh are required' },
-        { status: 400 }
-      )
+    if ('error' in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
-
-    const dateObj = new Date(date)
-    dateObj.setUTCHours(0, 0, 0, 0)
 
     const existingYield = await prisma.energyYield.findUnique({
-      where: { date: dateObj },
+      where: { date: parsed.date },
     })
 
-    let result
-    if (existingYield) {
-      result = await prisma.energyYield.update({
-        where: { date: dateObj },
-        data: { kwh: parseFloat(kwh) },
-      })
-    } else {
-      result = await prisma.energyYield.create({
-        data: {
-          date: dateObj,
-          kwh: parseFloat(kwh),
-        },
-      })
-    }
+    const result = existingYield
+      ? await prisma.energyYield.update({
+          where: { date: parsed.date },
+          data: { kwh: parsed.kwh },
+        })
+      : await prisma.energyYield.create({
+          data: {
+            date: parsed.date,
+            kwh: parsed.kwh,
+          },
+        })
 
     return NextResponse.json(result)
   } catch (error) {
     console.error('Error saving yield:', error)
     return NextResponse.json(
       { error: 'Failed to save yield' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const dateParam = request.nextUrl.searchParams.get('date')
+    const parsed = parseDateValue(dateParam)
+
+    if ('error' in parsed) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 })
+    }
+
+    const deleted = await prisma.energyYield.delete({
+      where: { date: parsed.date },
+    })
+
+    return NextResponse.json({ deleted })
+  } catch (error) {
+    console.error('Error deleting yield:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete yield' },
       { status: 500 }
     )
   }

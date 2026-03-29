@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseImportEntry } from '@/lib/yield-validation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,50 +18,40 @@ export async function POST(request: NextRequest) {
       imported: 0,
       updated: 0,
       errors: 0,
-      errorDetails: [] as string[]
+      errorDetails: [] as string[],
     }
 
-    for (const entry of data) {
+    for (const [index, entry] of data.entries()) {
+      const parsed = parseImportEntry(entry, index)
+      if ('error' in parsed) {
+        results.errors++
+        results.errorDetails.push(parsed.error)
+        continue
+      }
+
       try {
-        const { date, kwh } = entry
-        
-        if (!date || kwh === undefined) {
-          results.errors++
-          results.errorDetails.push(`Invalid entry: ${JSON.stringify(entry)}`)
-          continue
-        }
-
-        const dateObj = new Date(date)
-        if (isNaN(dateObj.getTime())) {
-          results.errors++
-          results.errorDetails.push(`Invalid date: ${date}`)
-          continue
-        }
-
-        dateObj.setHours(0, 0, 0, 0)
-
         const existingYield = await prisma.energyYield.findUnique({
-          where: { date: dateObj },
+          where: { date: parsed.date },
         })
 
         if (existingYield) {
           await prisma.energyYield.update({
-            where: { date: dateObj },
-            data: { kwh: parseFloat(kwh) },
+            where: { date: parsed.date },
+            data: { kwh: parsed.kwh },
           })
           results.updated++
         } else {
           await prisma.energyYield.create({
             data: {
-              date: dateObj,
-              kwh: parseFloat(kwh),
+              date: parsed.date,
+              kwh: parsed.kwh,
             },
           })
           results.imported++
         }
       } catch (error) {
         results.errors++
-        results.errorDetails.push(`Error processing entry: ${error}`)
+        results.errorDetails.push(`Error processing entry ${index + 1}: ${error}`)
       }
     }
 

@@ -39,6 +39,9 @@ export default function EnergyDashboard() {
   const [allYields, setAllYields] = useState<EnergyYield[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [selectedYield, setSelectedYield] = useState<EnergyYield | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [activeTab, setActiveTab] = useState('yearly')
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
@@ -103,24 +106,30 @@ export default function EnergyDashboard() {
   const handleDayClick = (day: number) => {
     const clickedDate = new Date(Date.UTC(currentYear, currentMonth, day))
     setSelectedDate(clickedDate)
+    setFormError(null)
     
     const existingYield = yields.find(
       (y) => format(new Date(y.date), 'yyyy-MM-dd') === format(clickedDate, 'yyyy-MM-dd')
     )
+    setSelectedYield(existingYield ?? null)
     setKwhValue(existingYield?.kwh.toString() || '')
     setDialogOpen(true)
   }
 
   const handleSave = async () => {
-    if (!selectedDate) return
+    if (!selectedDate) {
+      setFormError('Bitte wählen Sie zuerst ein Datum aus.')
+      return
+    }
 
-    const kwh = parseFloat(kwhValue)
-    if (Number.isNaN(kwh)) {
-      setError('Ungültiger kWh-Wert.')
+    const kwh = parseFloat(kwhValue.replace(',', '.'))
+    if (Number.isNaN(kwh) || kwh < 0) {
+      setFormError('Bitte geben Sie eine gültige kWh-Zahl größer oder gleich 0 ein.')
       return
     }
 
     try {
+      setFormError(null)
       const response = await fetch('/api/yields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -130,9 +139,9 @@ export default function EnergyDashboard() {
         }),
       })
 
+      const result = await response.json().catch(() => null)
       if (!response.ok) {
-        const result = await response.json().catch(() => null)
-        setError(result?.error || 'Fehler beim Speichern des Ertrags.')
+        setFormError(result?.error || 'Fehler beim Speichern des Ertrags.')
         return
       }
 
@@ -140,10 +149,40 @@ export default function EnergyDashboard() {
       setDialogOpen(false)
       setKwhValue('')
       setSelectedDate(null)
+      setSelectedYield(null)
       setError(null)
     } catch (error) {
       console.error('Error saving yield:', error)
-      setError('Fehler beim Speichern des Ertrags.')
+      setFormError('Fehler beim Speichern des Ertrags.')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedYield) return
+
+    try {
+      setIsDeleting(true)
+      const response = await fetch(`/api/yields?date=${encodeURIComponent(selectedYield.date)}`, {
+        method: 'DELETE',
+      })
+
+      const result = await response.json().catch(() => null)
+      if (!response.ok) {
+        setFormError(result?.error || 'Fehler beim Löschen des Ertrags.')
+        return
+      }
+
+      await fetchAllYields()
+      setDialogOpen(false)
+      setKwhValue('')
+      setSelectedDate(null)
+      setSelectedYield(null)
+      setError(null)
+    } catch (error) {
+      console.error('Error deleting yield:', error)
+      setFormError('Fehler beim Löschen des Ertrags.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -163,13 +202,13 @@ export default function EnergyDashboard() {
       lines.forEach((line, index) => {
         const [dateStr, kwhStr] = line.split(',')
         if (!dateStr || !kwhStr) {
-          errors.push(`Zeile ${index + 1}: Ungültiges Format`)
+          errors.push(`Zeile ${index + 1}: Ungültiges Format`) 
           return
         }
 
         const [day, month, year] = dateStr.trim().split('.')
         if (!day || !month || !year) {
-          errors.push(`Zeile ${index + 1}: Ungültiges Datum`)
+          errors.push(`Zeile ${index + 1}: Ungültiges Datum`) 
           return
         }
 
@@ -182,7 +221,7 @@ export default function EnergyDashboard() {
           return
         }
 
-        if (Number.isNaN(kwh)) {
+        if (Number.isNaN(kwh) || kwh < 0) {
           errors.push(`Zeile ${index + 1}: Ungültiger kWh-Wert`)
           return
         }
@@ -667,14 +706,29 @@ export default function EnergyDashboard() {
                 autoFocus
               />
             </div>
+            {formError && (
+              <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-700 dark:bg-red-900/20 dark:text-red-200">
+                {formError}
+              </div>
+            )}
             <div className="flex gap-2 pt-4">
               <Button
-              onClick={handleSave}
-              disabled={!selectedDate || !kwhValue || Number.isNaN(parseFloat(kwhValue))}
-              className="flex-1"
-            >
+                onClick={handleSave}
+                disabled={!selectedDate || Number.isNaN(parseFloat(kwhValue.replace(',', '.')))}
+                className="flex-1"
+              >
                 Speichern
               </Button>
+              {selectedYield && (
+                <Button
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="flex-1"
+                >
+                  {isDeleting ? 'Löschen...' : 'Löschen'}
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setDialogOpen(false)} className="flex-1">
                 Abbrechen
               </Button>
