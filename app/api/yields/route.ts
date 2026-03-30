@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
     const yields = await prisma.energyYield.findMany({
       where: whereClause,
       orderBy: { date: 'asc' },
+      select: { id: true, date: true, kwh: true },
     })
 
     return NextResponse.json(yields)
@@ -50,18 +51,21 @@ export async function POST(request: NextRequest) {
 
     const existingYield = await prisma.energyYield.findUnique({
       where: { date: parsed.date },
+      select: { id: true },
     })
 
     const result = existingYield
       ? await prisma.energyYield.update({
           where: { date: parsed.date },
           data: { kwh: parsed.kwh },
+          select: { id: true, date: true, kwh: true },
         })
       : await prisma.energyYield.create({
           data: {
             date: parsed.date,
             kwh: parsed.kwh,
           },
+          select: { id: true, date: true, kwh: true },
         })
 
     return NextResponse.json(result)
@@ -85,6 +89,7 @@ export async function DELETE(request: NextRequest) {
 
     const deleted = await prisma.energyYield.delete({
       where: { date: parsed.date },
+      select: { id: true, date: true, kwh: true },
     })
 
     return NextResponse.json({ deleted })

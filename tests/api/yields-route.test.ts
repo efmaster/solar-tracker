@@ -71,6 +71,7 @@ describe('GET /api/yields', () => {
     expect(mockPrisma.energyYield.findMany).toHaveBeenCalledWith({
       where: {},
       orderBy: { date: 'asc' },
+      select: { id: true, date: true, kwh: true },
     })
   })
 
@@ -143,6 +144,9 @@ describe('DELETE /api/yields', () => {
     expect(response.status).toBe(200)
     const json = await response.json()
     expect(json).toEqual({ deleted: { id: 1, date: '2025-03-02T00:00:00.000Z', kwh: 10 } })
-    expect(mockPrisma.energyYield.delete).toHaveBeenCalledWith({ where: { date: new Date('2025-03-02T00:00:00.000Z') } })
+    expect(mockPrisma.energyYield.delete).toHaveBeenCalledWith({
+      where: { date: new Date('2025-03-02T00:00:00.000Z') },
+      select: { id: true, date: true, kwh: true },
+    })
   })
 })

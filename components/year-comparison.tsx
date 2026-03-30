@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { format, getYear } from 'date-fns'
+import { format } from 'date-fns'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,10 +14,12 @@ import { useTranslations } from '@/lib/use-translations'
 import { getDateFnsLocale } from '@/lib/i18n'
 import { useLocale } from '@/lib/locale-provider'
 
-interface EnergyYield {
-  id: number
-  date: string
-  kwh: number
+interface YearSummary {
+  year: number
+  total: number
+  count: number
+  monthsWithData: number
+  monthlyTotals: number[] // index 0..11 (Jan..Dec)
 }
 
 interface CustomTooltipProps {
@@ -54,17 +56,17 @@ export default function YearComparison({ backHref }: YearComparisonProps) {
   const { locale, toggleLocale } = useLocale()
   const t = useTranslations()
   const dateFnsLocale = getDateFnsLocale(locale)
-  const [allYields, setAllYields] = useState<EnergyYield[]>([])
+  const [yieldsSummary, setYieldsSummary] = useState<YearSummary[]>([])
   const [abschlag, setAbschlag] = useState<number>(0)
   const [einspeiseverguetung, setEinspeiseverguetung] = useState<number>(0)
 
-  async function fetchAllYields() {
+  async function fetchAllYieldsSummary() {
     try {
-      const response = await fetch(`/api/yields`)
+      const response = await fetch(`/api/yields/summary`)
       
       if (response.ok) {
         const data = await response.json()
-        setAllYields(Array.isArray(data) ? data : [])
+        setYieldsSummary(Array.isArray(data?.years) ? data.years : [])
       }
     } catch (error) {
       console.error('Error fetching yields:', error)
@@ -72,7 +74,7 @@ export default function YearComparison({ backHref }: YearComparisonProps) {
   }
 
   useEffect(() => {
-    fetchAllYields()
+    fetchAllYieldsSummary()
     
     const savedAbschlag = localStorage.getItem('abschlag')
     const savedEinspeise = localStorage.getItem('einspeiseverguetung')
@@ -93,66 +95,33 @@ export default function YearComparison({ backHref }: YearComparisonProps) {
   }
 
   const getYearlyData = () => {
-    const yearMap = new Map<number, { total: number, count: number, months: Set<number> }>()
-    
-    allYields.forEach(y => {
-      const date = new Date(y.date)
-      const year = getYear(date)
-      const month = date.getMonth()
-      const existing = yearMap.get(year) || { total: 0, count: 0, months: new Set<number>() }
-      existing.months.add(month)
-      yearMap.set(year, {
-        total: existing.total + y.kwh,
-        count: existing.count + 1,
-        months: existing.months
-      })
-    })
-
-    const years = Array.from(yearMap.entries())
-      .map(([year, data]) => {
-        const monthsWithData = data.months.size
-        const yearlyAbschlag = abschlag * monthsWithData
+    return yieldsSummary
+      .map((y) => {
+        const yearlyAbschlag = abschlag * y.monthsWithData
         return {
-          year,
-          total: data.total,
-          average: data.count > 0 ? data.total / data.count : 0,
-          daysWithData: data.count,
-          monthsWithData: monthsWithData,
-          einnahmen: (data.total * einspeiseverguetung) / 100,
-          bilanz: ((data.total * einspeiseverguetung) / 100) - yearlyAbschlag
+          year: y.year,
+          total: y.total,
+          average: y.count > 0 ? y.total / y.count : 0,
+          daysWithData: y.count,
+          monthsWithData: y.monthsWithData,
+          einnahmen: (y.total * einspeiseverguetung) / 100,
+          bilanz: ((y.total * einspeiseverguetung) / 100) - yearlyAbschlag,
         }
       })
       .sort((a, b) => a.year - b.year)
-
-    return years
   }
 
   const getMonthlyComparisonData = () => {
     const months = Array.from({ length: 12 }, (_, index) =>
       format(new Date(2024, index, 1), 'MMM', { locale: dateFnsLocale })
     )
-    const yearMonthMap = new Map<string, Map<number, number>>()
-
-    allYields.forEach(y => {
-      const date = new Date(y.date)
-      const year = getYear(date)
-      const month = date.getMonth()
-      
-      if (!yearMonthMap.has(year.toString())) {
-        yearMonthMap.set(year.toString(), new Map())
-      }
-      
-      const yearData = yearMonthMap.get(year.toString())!
-      yearData.set(month, (yearData.get(month) || 0) + y.kwh)
-    })
-
+    const yearList = yieldsSummary.map((y) => y.year).sort((a, b) => a - b)
     return months.map((monthName, monthIndex) => {
       const dataPoint: Record<string, number | string> = { month: monthName }
-      
-      yearMonthMap.forEach((monthData, year) => {
-        dataPoint[year] = monthData.get(monthIndex) || 0
-      })
-      
+      for (const year of yearList) {
+        const yearEntry = yieldsSummary.find((y) => y.year === year)
+        dataPoint[year.toString()] = yearEntry?.monthlyTotals[monthIndex] ?? 0
+      }
       return dataPoint
     })
   }
@@ -342,7 +311,7 @@ export default function YearComparison({ backHref }: YearComparisonProps) {
                   <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ color: '#6b7280' }} />
-                  {Array.from(new Set(allYields.map(y => getYear(new Date(y.date))))).sort().map((year, index) => {
+                  {yieldsSummary.map((y) => y.year).sort((a, b) => a - b).map((year, index) => {
                     const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
                     return (
                       <Line 
