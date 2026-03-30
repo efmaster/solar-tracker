@@ -1,13 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getYear } from 'date-fns'
+import Link from 'next/link'
+import { format, getYear } from 'date-fns'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Sun, Moon } from 'lucide-react'
+import { ArrowLeft, Sun, Moon, Languages } from 'lucide-react'
 import { useTheme } from '@/components/theme-provider'
+import { useTranslations } from '@/lib/use-translations'
+import { getDateFnsLocale, type Locale } from '@/lib/i18n'
+import { useLocale } from '@/lib/locale-provider'
 
 interface EnergyYield {
   id: number
@@ -39,11 +43,14 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
 }
 
 interface YearComparisonProps {
-  onBack: () => void
+  backHref: string
 }
 
-export default function YearComparison({ onBack }: YearComparisonProps) {
+export default function YearComparison({ backHref }: YearComparisonProps) {
   const { theme, toggleTheme } = useTheme()
+  const { locale, toggleLocale } = useLocale()
+  const t = useTranslations()
+  const dateFnsLocale = getDateFnsLocale(locale)
   const [allYields, setAllYields] = useState<EnergyYield[]>([])
   const [loading, setLoading] = useState(true)
   const [abschlag, setAbschlag] = useState<number>(0)
@@ -122,7 +129,9 @@ export default function YearComparison({ onBack }: YearComparisonProps) {
   }
 
   const getMonthlyComparisonData = () => {
-    const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+    const months = Array.from({ length: 12 }, (_, index) =>
+      format(new Date(2024, index, 1), 'MMM', { locale: dateFnsLocale })
+    )
     const yearMonthMap = new Map<string, Map<number, number>>()
 
     allYields.forEach(y => {
@@ -152,61 +161,74 @@ export default function YearComparison({ onBack }: YearComparisonProps) {
   const yearlyData = getYearlyData()
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 p-6 transition-colors">
+    <div className="min-h-screen bg-linear-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800 p-6 transition-colors">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="outline" size="icon" onClick={onBack}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Jahresvergleich</h1>
+            <Link href={backHref} className="inline-flex">
+              <Button variant="outline" size="icon">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white">{t.buttons.yearComparison}</h1>
           </div>
-          <Button 
-            variant="outline" 
-            size="icon" 
-            onClick={toggleTheme}
-            className="transition-transform hover:scale-110"
-            title={theme === 'dark' ? 'Hell-Modus' : 'Dunkel-Modus'}
-          >
-            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={toggleLocale}
+              className="transition-transform hover:scale-110"
+              title={locale === 'de' ? t.buttons.switchToEnglish : t.buttons.switchToGerman}
+            >
+              <Languages className="h-5 w-5" />
+            </Button>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={toggleTheme}
+              className="transition-transform hover:scale-110"
+              title={theme === 'dark' ? t.buttons.lightMode : t.buttons.darkMode}
+            >
+              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+          </div>
         </div>
 
         {/* Cost Calculation Inputs */}
         <Card>
           <CardHeader>
-            <CardTitle>Kostenberechnung</CardTitle>
+            <CardTitle>{t.ui.costCalculation}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                  Abschlag pro Monat (€)
+                  {t.ui.income} / {t.ui.months}
                 </label>
                 <Input
                   type="number"
                   step="0.01"
                   value={abschlag}
                   onChange={(e) => handleAbschlagChange(e.target.value)}
-                  placeholder="z.B. 150.00"
+                  placeholder="150.00"
                 />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                  Einspeisevergütung (Cent/kWh)
+                  {t.chart.revenue} (Cent/kWh)
                 </label>
                 <Input
                   type="number"
                   step="0.01"
                   value={einspeiseverguetung}
                   onChange={(e) => handleEinspeiseChange(e.target.value)}
-                  placeholder="z.B. 8.20"
+                  placeholder="8.20"
                 />
               </div>
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
-              Formel: Bilanz = Einnahmen - Vorauszahlung | Positiv = Gewinn (Rückzahlung an dich) | Negativ = Nachzahlung (du zahlst)
+              {t.ui.formulaDescription}
             </p>
           </CardContent>
         </Card>
@@ -214,20 +236,20 @@ export default function YearComparison({ onBack }: YearComparisonProps) {
         {/* Year Comparison Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Jahresübersicht</CardTitle>
+            <CardTitle>{t.ui.yearOverview}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b-2 border-gray-300 dark:border-gray-600">
-                    <th className="text-left p-3 font-semibold text-gray-900 dark:text-white">Jahr</th>
-                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Summe (kWh)</th>
-                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Durchschnitt (kWh/Tag)</th>
-                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Tage</th>
-                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Monate</th>
-                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Einnahmen (€)</th>
-                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">Bilanz (€)</th>
+                    <th className="text-left p-3 font-semibold text-gray-900 dark:text-white">{t.ui.currentYear}</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">{t.chart.sum}</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">{t.chart.average}</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">{t.ui.days}</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">{t.ui.months}</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">{t.chart.revenue} (€)</th>
+                    <th className="text-right p-3 font-semibold text-gray-900 dark:text-white">{t.chart.balance} (€)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -272,7 +294,7 @@ export default function YearComparison({ onBack }: YearComparisonProps) {
           {/* Total Production Comparison */}
           <Card>
             <CardHeader>
-              <CardTitle>Jahresproduktion Vergleich</CardTitle>
+              <CardTitle>{t.ui.productionComparison}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -282,7 +304,7 @@ export default function YearComparison({ onBack }: YearComparisonProps) {
                   <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ color: '#6b7280' }} />
-                  <Bar dataKey="total" fill="#3b82f6" name="Summe (kWh)" />
+                  <Bar dataKey="total" fill="#3b82f6" name={t.chart.sum} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -291,7 +313,7 @@ export default function YearComparison({ onBack }: YearComparisonProps) {
           {/* Financial Comparison */}
           <Card>
             <CardHeader>
-              <CardTitle>Finanzvergleich</CardTitle>
+              <CardTitle>{t.ui.financialComparison}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -301,8 +323,8 @@ export default function YearComparison({ onBack }: YearComparisonProps) {
                   <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ color: '#6b7280' }} />
-                  <Bar dataKey="einnahmen" fill="#10b981" name="Einnahmen (€)" />
-                  <Bar dataKey="bilanz" fill="#3b82f6" name="Bilanz (€)" />
+                  <Bar dataKey="einnahmen" fill="#10b981" name={t.chart.revenue} />
+                  <Bar dataKey="bilanz" fill="#3b82f6" name={t.chart.balance} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -311,7 +333,7 @@ export default function YearComparison({ onBack }: YearComparisonProps) {
           {/* Monthly Comparison Across Years */}
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Monatsvergleich über alle Jahre</CardTitle>
+              <CardTitle>{t.ui.monthlyComparison}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>

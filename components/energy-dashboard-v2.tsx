@@ -1,15 +1,17 @@
 'use client'
 
-import { useState, useEffect, useMemo, type ChangeEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import Link from 'next/link'
 import { format, getMonth, getYear, getDaysInMonth } from 'date-fns'
-import { de } from 'date-fns/locale'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
-import { ChevronLeft, ChevronRight, Sun, Moon, Upload, BarChart3, Download, FileText, File } from 'lucide-react'
+import { Sun, Moon, Upload, BarChart3, Download, FileText, File, Languages } from 'lucide-react'
 import { useTheme } from '@/components/theme-provider'
+import { useTranslations } from '@/lib/use-translations'
+import { getDateFnsLocale } from '@/lib/i18n'
+import { useLocale } from '@/lib/locale-provider'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { EnergyDashboardCalendar } from '@/components/energy-dashboard-calendar'
 import { EnergyDashboardHeatmap } from '@/components/energy-dashboard-heatmap'
@@ -32,6 +34,9 @@ const getColorForValue = (value: number | null, min: number, max: number): strin
 
 export default function EnergyDashboard() {
   const { theme, toggleTheme } = useTheme()
+  const { locale, toggleLocale } = useLocale()
+  const t = useTranslations()
+  const dateFnsLocale = getDateFnsLocale(locale)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -48,7 +53,6 @@ export default function EnergyDashboard() {
   const [importing, setImporting] = useState(false)
   const [yearSelectorOpen, setYearSelectorOpen] = useState(false)
   const [showHeatmap, setShowHeatmap] = useState(false)
-  const router = useRouter()
 
   const currentYear = useMemo(() => getYear(currentDate), [currentDate])
   const currentMonth = useMemo(() => getMonth(currentDate), [currentDate])
@@ -71,37 +75,36 @@ export default function EnergyDashboard() {
     return yearArray
   }, [allYields, currentYear])
 
-  useEffect(() => {
-    fetchAllYields()
-  }, [])
-
-  const fetchAllYields = async () => {
+  const fetchAllYields = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
       const response = await fetch(`/api/yields`)
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
       const contentType = response.headers.get('content-type')
-      if (!contentType || !contentType.includes('application/json')) {
-        console.warn('API returned non-JSON response, initializing empty data')
+      const data = (contentType && contentType.includes('application/json'))
+        ? await response.json().catch(() => null)
+        : null
+
+      if (!response.ok) {
+        setError(data?.error || t.errors.loadData)
         setAllYields([])
         return
       }
-      
-      const data = await response.json()
+
       setAllYields(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching all yields:', error)
-      setError('Fehler beim Laden der Daten. Bitte Seite neu laden.')
+      setError(t.errors.loadData)
       setAllYields([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [t])
+
+  useEffect(() => {
+    fetchAllYields()
+  }, [fetchAllYields])
 
   const handleDayClick = (day: number) => {
     const clickedDate = new Date(Date.UTC(currentYear, currentMonth, day))
@@ -118,13 +121,13 @@ export default function EnergyDashboard() {
 
   const handleSave = async () => {
     if (!selectedDate) {
-      setFormError('Bitte wählen Sie zuerst ein Datum aus.')
+      setFormError(t.errors.invalidDate)
       return
     }
 
     const kwh = parseFloat(kwhValue.replace(',', '.'))
     if (Number.isNaN(kwh) || kwh < 0) {
-      setFormError('Bitte geben Sie eine gültige kWh-Zahl größer oder gleich 0 ein.')
+      setFormError(t.errors.invalidKwh)
       return
     }
 
@@ -141,7 +144,7 @@ export default function EnergyDashboard() {
 
       const result = await response.json().catch(() => null)
       if (!response.ok) {
-        setFormError(result?.error || 'Fehler beim Speichern des Ertrags.')
+        setFormError(result?.error || t.errors.save)
         return
       }
 
@@ -153,7 +156,7 @@ export default function EnergyDashboard() {
       setError(null)
     } catch (error) {
       console.error('Error saving yield:', error)
-      setFormError('Fehler beim Speichern des Ertrags.')
+      setFormError(t.errors.save)
     }
   }
 
@@ -168,7 +171,7 @@ export default function EnergyDashboard() {
 
       const result = await response.json().catch(() => null)
       if (!response.ok) {
-        setFormError(result?.error || 'Fehler beim Löschen des Ertrags.')
+        setFormError(result?.error || t.errors.delete)
         return
       }
 
@@ -180,7 +183,7 @@ export default function EnergyDashboard() {
       setError(null)
     } catch (error) {
       console.error('Error deleting yield:', error)
-      setFormError('Fehler beim Löschen des Ertrags.')
+      setFormError(t.errors.delete)
     } finally {
       setIsDeleting(false)
     }
@@ -202,13 +205,13 @@ export default function EnergyDashboard() {
       lines.forEach((line, index) => {
         const [dateStr, kwhStr] = line.split(',')
         if (!dateStr || !kwhStr) {
-          errors.push(`Zeile ${index + 1}: Ungültiges Format`) 
+          errors.push(`${locale === 'de' ? 'Zeile' : 'Line'} ${index + 1}: ${t.ui.invalidFormat}`)
           return
         }
 
         const [day, month, year] = dateStr.trim().split('.')
         if (!day || !month || !year) {
-          errors.push(`Zeile ${index + 1}: Ungültiges Datum`) 
+          errors.push(`${locale === 'de' ? 'Zeile' : 'Line'} ${index + 1}: ${t.ui.invalidDate}`)
           return
         }
 
@@ -217,12 +220,12 @@ export default function EnergyDashboard() {
         const dateObj = new Date(isoDate)
 
         if (isNaN(dateObj.getTime())) {
-          errors.push(`Zeile ${index + 1}: Ungültiges Datum ${dateStr}`)
+          errors.push(`${locale === 'de' ? 'Zeile' : 'Line'} ${index + 1}: ${t.ui.invalidDate} ${dateStr}`)
           return
         }
 
         if (Number.isNaN(kwh) || kwh < 0) {
-          errors.push(`Zeile ${index + 1}: Ungültiger kWh-Wert`)
+          errors.push(`${locale === 'de' ? 'Zeile' : 'Line'} ${index + 1}: ${t.errors.invalidKwh}`)
           return
         }
 
@@ -234,7 +237,7 @@ export default function EnergyDashboard() {
           imported: 0,
           updated: 0,
           errors: errors.length || 1,
-          errorDetails: errors.length > 0 ? errors : ['Keine gültigen Daten gefunden']
+          errorDetails: errors.length > 0 ? errors : [t.errors.noValidData]
         })
         return
       }
@@ -245,22 +248,28 @@ export default function EnergyDashboard() {
         body: JSON.stringify({ data: parsed }),
       })
 
+      const result = await response.json().catch(() => null)
       if (response.ok) {
-        const result = await response.json()
         setImportResult({
-          imported: result.imported,
-          updated: result.updated,
-          errors: result.errors + errors.length,
-          errorDetails: [...(result.errorDetails || []), ...errors],
+          imported: result?.imported ?? 0,
+          updated: result?.updated ?? 0,
+          errors: (result?.errors ?? 0) + errors.length,
+          errorDetails: [...(result?.errorDetails ?? []), ...errors],
         })
         await fetchAllYields()
+      } else if (result?.errorDetails) {
+        setImportResult({
+          imported: result.imported ?? 0,
+          updated: result.updated ?? 0,
+          errors: (result.errors ?? 0) + errors.length,
+          errorDetails: [...result.errorDetails, ...errors],
+        })
       } else {
-        const result = await response.json().catch(() => null)
         setImportResult({
           imported: 0,
           updated: 0,
-          errors: 1,
-          errorDetails: [result?.error || 'Import fehlgeschlagen', ...errors],
+          errors: 1 + errors.length,
+          errorDetails: [result?.error || t.errors.importFailed, ...errors],
         })
       }
     } catch (error) {
@@ -269,7 +278,7 @@ export default function EnergyDashboard() {
         imported: 0,
         updated: 0,
         errors: 1,
-        errorDetails: ['Fehler beim Lesen der Datei']
+        errorDetails: [t.errors.fileReadError],
       })
     } finally {
       setImporting(false)
@@ -292,7 +301,7 @@ export default function EnergyDashboard() {
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `solarertrag_export_${format(new Date(), 'yyyy-MM-dd')}.csv`)
+    link.setAttribute('download', `${t.csv.fileName}_${format(new Date(), 'yyyy-MM-dd')}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
@@ -307,7 +316,7 @@ export default function EnergyDashboard() {
     let html = `
       <html>
         <head>
-          <title>Solarertrag Export</title>
+          <title>${t.ui.exportTitle}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 20px; }
             h1 { color: #1e40af; }
@@ -319,18 +328,18 @@ export default function EnergyDashboard() {
           </style>
         </head>
         <body>
-          <h1>Solarertrag Export</h1>
+          <h1>${t.ui.exportTitle}</h1>
           <div class="summary">
-            <h3>Zusammenfassung</h3>
-            <p><strong>Gesamt kWh:</strong> ${co2Savings.totalKwh.toFixed(2)} kWh</p>
-            <p><strong>CO₂-Einsparung:</strong> ${co2Savings.co2Saved.toFixed(2)} kg</p>
-            <p><strong>Bäume-Äquivalent:</strong> ${co2Savings.treesEquivalent.toFixed(1)} Bäume</p>
+            <h3>${t.ui.summary}</h3>
+            <p><strong>${t.ui.total} kWh:</strong> ${co2Savings.totalKwh.toFixed(2)} kWh</p>
+            <p><strong>${t.ui.co2Title}:</strong> ${co2Savings.co2Saved.toFixed(2)} kg</p>
+            <p><strong>${t.ui.treesEquivalent ?? 'Bäume-Äquivalent'}:</strong> ${co2Savings.treesEquivalent.toFixed(1)} ${locale === 'de' ? 'Bäume' : 'trees'}</p>
           </div>
           <table>
             <thead>
               <tr>
-                <th>Datum</th>
-                <th>kWh</th>
+                <th>${t.ui.exportDate}</th>
+                <th>${t.ui.exportKwh}</th>
               </tr>
             </thead>
             <tbody>
@@ -394,10 +403,9 @@ export default function EnergyDashboard() {
   }, [currentYear, currentMonth, dayData])
 
   const monthlyChartData = useMemo(() => {
-    const months = [
-      'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'
-    ]
+    const months = Array.from({ length: 12 }, (_, index) =>
+      format(new Date(currentYear, index, 1), 'MMM', { locale: dateFnsLocale })
+    )
 
     return months.map((month, index) => {
       const monthYields = yields.filter((y) => {
@@ -407,7 +415,7 @@ export default function EnergyDashboard() {
       const total = monthYields.reduce((sum, y) => sum + y.kwh, 0)
       return { month, kwh: total }
     })
-  }, [yields, currentYear])
+  }, [yields, currentYear, dateFnsLocale])
 
   const dailyChartData = useMemo(
     () => dayData.map((d) => ({ tag: d.day, kwh: d.kwh || 0 })),
@@ -415,7 +423,7 @@ export default function EnergyDashboard() {
   )
 
   const yearlyLineChartData = useMemo(() => {
-    const data: { [key: string]: any } = {}
+    const data: Record<number, { day: number; [key: string]: number }> = {}
 
     for (let month = 0; month < 12; month++) {
       const daysInMonth = getDaysInMonth(new Date(currentYear, month))
@@ -427,18 +435,17 @@ export default function EnergyDashboard() {
     yields.forEach((y) => {
       const yieldDate = new Date(y.date)
       const day = yieldDate.getDate()
-      const monthName = format(yieldDate, 'MMMM', { locale: de })
+      const monthName = format(yieldDate, 'MMMM', { locale: dateFnsLocale })
       data[day][monthName] = y.kwh
     })
 
-    return Object.values(data).sort((a: any, b: any) => a.day - b.day)
-  }, [yields, currentYear])
+    return Object.values(data).sort((a, b) => a.day - b.day)
+  }, [yields, currentYear, dateFnsLocale])
 
   const monthlyStatistics = useMemo(() => {
-    const months = [
-      'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
-    ]
+    const months = Array.from({ length: 12 }, (_, index) =>
+      format(new Date(currentYear, index, 1), 'MMMM', { locale: dateFnsLocale })
+    )
 
     return months.map((month, index) => {
       const monthYields = yields.filter((y) => {
@@ -461,7 +468,7 @@ export default function EnergyDashboard() {
         coverage: daysInMonth > 0 ? (daysWithData / daysInMonth) * 100 : 0,
       }
     })
-  }, [yields, currentYear])
+  }, [yields, currentYear, dateFnsLocale])
 
   const co2Savings = useMemo(() => {
     const totalKwh = yields.reduce((sum, y) => sum + y.kwh, 0)
@@ -475,20 +482,6 @@ export default function EnergyDashboard() {
       treesEquivalent,
     }
   }, [yields])
-
-  const missingDays = useMemo(() => {
-    const daysInMonth = getDaysInMonth(currentDate)
-    const existingDays = new Set(monthYields.map((y) => new Date(y.date).getDate()))
-    const missing: number[] = []
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      if (!existingDays.has(day)) {
-        missing.push(day)
-      }
-    }
-
-    return missing
-  }, [monthYields, currentDate])
 
   const yearHeatmapData = useMemo(() => {
     const heatmapData: { month: string; days: { day: number; kwh: number | null; color: string; date: string }[] }[] = []
@@ -527,13 +520,13 @@ export default function EnergyDashboard() {
       }
 
       heatmapData.push({
-        month: format(new Date(currentYear, month), 'MMM', { locale: de }),
+        month: format(new Date(currentYear, month), 'MMM', { locale: dateFnsLocale }),
         days: monthData,
       })
     }
 
     return heatmapData
-  }, [yields, currentYear])
+  }, [yields, currentYear, dateFnsLocale])
 
   const changeMonth = (delta: number) => {
     const newDate = new Date(currentDate)
@@ -546,22 +539,21 @@ export default function EnergyDashboard() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Solarertrag Tracker</h1>
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">{t.appTitle}</h1>
           <div className="flex items-center gap-3">
-            <Button 
-              variant="outline"
-              onClick={() => router.push('/vergleich')}
-              className="flex items-center gap-2"
+            <Link
+              href="/vergleich"
+              className={buttonVariants({ variant: 'outline', className: 'flex items-center gap-2' })}
             >
               <BarChart3 className="h-4 w-4" />
-              Jahresvergleich
-            </Button>
+              {t.buttons.yearComparison}
+            </Link>
             <Button 
-              variant={showHeatmap ? "default" : "outline"}
+              variant={showHeatmap ? 'default' : 'outline'}
               onClick={() => setShowHeatmap(!showHeatmap)}
               className="flex items-center gap-2"
             >
-              Heatmap {showHeatmap ? 'Aus' : 'An'}
+              {t.buttons.heatmap} {showHeatmap ? t.ui.hide : t.ui.show}
             </Button>
             <Button 
               variant="outline"
@@ -569,7 +561,7 @@ export default function EnergyDashboard() {
               className="flex items-center gap-2"
             >
               <Upload className="h-4 w-4" />
-              Import
+              {t.buttons.import}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger>
@@ -578,65 +570,42 @@ export default function EnergyDashboard() {
                   className="flex items-center gap-2"
                 >
                   <Download className="h-4 w-4" />
-                  Export
+                  {t.buttons.export}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuItem onClick={handleExportCSV}>
                   <File className="h-4 w-4 mr-2 inline" />
-                  CSV Export
+                  {t.buttons.csvExport}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportPDF}>
                   <FileText className="h-4 w-4 mr-2 inline" />
-                  PDF Export (Drucken)
+                  {t.buttons.pdfExport}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button 
               variant="outline" 
               size="icon" 
+              onClick={toggleLocale}
+              className="transition-transform hover:scale-110"
+              title={locale === 'de' ? t.buttons.switchToEnglish : t.buttons.switchToGerman}
+            >
+              <Languages className="h-5 w-5" />
+            </Button>
+            <Button 
+              variant="outline" 
+              size="icon" 
               onClick={toggleTheme}
               className="transition-transform hover:scale-110"
-              title={theme === 'dark' ? 'Hell-Modus' : 'Dunkel-Modus'}
+              title={theme === 'dark' ? t.buttons.lightMode : t.buttons.darkMode}
             >
               {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </Button>
           </div>
         </div>
-        
-        {error && (
-          <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg">
-            {error}
-          </div>
-        )}
 
-        {/* Missing Days Warning */}
-        {missingDays.length > 0 && (
-          <Card className="bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="text-4xl">⚠️</div>
-                <div className="flex-1">
-                  <h3 className="text-sm font-medium text-orange-800 dark:text-orange-300">Fehlende Tage in {format(currentDate, 'MMMM', { locale: de })}</h3>
-                  <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                    {missingDays.length} Tage
-                  </p>
-                  <p className="text-xs text-orange-700 dark:text-orange-400 mt-1">
-                    {missingDays.slice(0, 5).join(', ')}{missingDays.length > 5 ? '...' : ''}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <EnergyDashboardHeatmap
-          showHeatmap={showHeatmap}
-          yearHeatmapData={yearHeatmapData}
-          currentYear={currentYear}
-        />
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
           <EnergyDashboardCalendar
             currentDate={currentDate}
             calendarCells={calendarCells}
@@ -649,30 +618,48 @@ export default function EnergyDashboard() {
             currentYear={currentYear}
             setCurrentDate={setCurrentDate}
           />
-          <EnergyDashboardCharts
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            currentYear={currentYear}
-            currentMonth={currentMonth}
-            yearlyLineChartData={yearlyLineChartData}
-            monthlyStatistics={monthlyStatistics}
-            monthlyChartData={monthlyChartData}
-            dailyChartData={dailyChartData}
-          />
+          <div className="space-y-6">
+            <EnergyDashboardCharts
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              currentYear={currentYear}
+              currentMonth={currentMonth}
+              yearlyLineChartData={yearlyLineChartData}
+              monthlyStatistics={monthlyStatistics}
+              monthlyChartData={monthlyChartData}
+              dailyChartData={dailyChartData}
+            />
+            <EnergyDashboardHeatmap
+              showHeatmap={showHeatmap}
+              yearHeatmapData={yearHeatmapData}
+              currentYear={currentYear}
+            />
+          </div>
         </div>
 
-        {/* CO2 Savings Card */}
+        {loading && (
+          <div className="rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-800 dark:text-blue-200">
+            {t.ui.loading}
+          </div>
+        )}
+        {error && (
+          <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-800 dark:text-red-200">
+            {error}
+          </div>
+        )}
+
+        {/* Missing Days Warning */}
         <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="text-4xl">🌱</div>
               <div className="flex-1">
-                <h3 className="text-sm font-medium text-green-800 dark:text-green-300">CO₂-Einsparung {currentYear}</h3>
+                <h3 className="text-sm font-medium text-green-800 dark:text-green-300">{t.ui.co2Title} {currentYear}</h3>
                 <p className="text-2xl font-bold text-green-900 dark:text-green-100">
                   {co2Savings.co2Saved.toFixed(0)} kg
                 </p>
                 <p className="text-xs text-green-700 dark:text-green-400 mt-1">
-                  ≈ {co2Savings.treesEquivalent.toFixed(1)} Bäume gepflanzt | {co2Savings.totalKwh.toFixed(0)} kWh produziert
+                  ≈ {co2Savings.treesEquivalent.toFixed(1)} {t.ui.treesPlanted} | {co2Savings.totalKwh.toFixed(0)} kWh {t.ui.produced}
                 </p>
               </div>
             </div>
@@ -685,23 +672,23 @@ export default function EnergyDashboard() {
         <DialogContent>
           <DialogClose onClose={() => setDialogOpen(false)} />
           <DialogHeader>
-            <DialogTitle>Ertrag eingeben</DialogTitle>
+            <DialogTitle>{t.ui.enterYield}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Datum</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.ui.exportDate}</label>
               <div className="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
-                {selectedDate && format(selectedDate, 'dd. MMMM yyyy', { locale: de })}
+                {selectedDate && format(selectedDate, 'dd. MMMM yyyy', { locale: dateFnsLocale })}
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">kWh Ertrag</label>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{t.chart.kwh}</label>
               <Input
                 type="number"
                 step="0.01"
                 value={kwhValue}
                 onChange={(e) => setKwhValue(e.target.value)}
-                placeholder="z.B. 25.5"
+                placeholder="25.5"
                 className="mt-1"
                 autoFocus
               />
@@ -717,7 +704,7 @@ export default function EnergyDashboard() {
                 disabled={!selectedDate || Number.isNaN(parseFloat(kwhValue.replace(',', '.')))}
                 className="flex-1"
               >
-                Speichern
+                {t.buttons.save}
               </Button>
               {selectedYield && (
                 <Button
@@ -726,11 +713,11 @@ export default function EnergyDashboard() {
                   disabled={isDeleting}
                   className="flex-1"
                 >
-                  {isDeleting ? 'Löschen...' : 'Löschen'}
+                  {isDeleting ? t.buttons.deleting : t.buttons.delete}
                 </Button>
               )}
               <Button variant="outline" onClick={() => setDialogOpen(false)} className="flex-1">
-                Abbrechen
+                {t.buttons.close}
               </Button>
             </div>
           </div>
@@ -742,7 +729,7 @@ export default function EnergyDashboard() {
         <DialogContent>
           <DialogClose onClose={() => setYearSelectorOpen(false)} />
           <DialogHeader>
-            <DialogTitle>Jahr auswählen</DialogTitle>
+            <DialogTitle>{t.ui.yearSelectTitle}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {availableYears.map((year) => (

@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { parseImportEntry } from '@/lib/yield-validation'
+import { parseImportBody, parseImportEntry } from '@/lib/yield-validation'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { data } = body
-
-    if (!data || !Array.isArray(data)) {
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch (error) {
       return NextResponse.json(
-        { error: 'Invalid data format' },
+        { error: 'Ungültiges JSON im Request-Body' },
         { status: 400 }
       )
+    }
+
+    const parsedBody = parseImportBody(body)
+
+    if ('error' in parsedBody) {
+      return NextResponse.json({ error: parsedBody.error }, { status: 400 })
     }
 
     const results = {
@@ -21,7 +27,7 @@ export async function POST(request: NextRequest) {
       errorDetails: [] as string[],
     }
 
-    for (const [index, entry] of data.entries()) {
+    for (const [index, entry] of parsedBody.data.entries()) {
       const parsed = parseImportEntry(entry, index)
       if ('error' in parsed) {
         results.errors++
@@ -53,6 +59,16 @@ export async function POST(request: NextRequest) {
         results.errors++
         results.errorDetails.push(`Error processing entry ${index + 1}: ${error}`)
       }
+    }
+
+    if (results.imported + results.updated === 0 && results.errors > 0) {
+      return NextResponse.json(
+        {
+          ...results,
+          error: 'Kein gültiger Eintrag wurde importiert.',
+        },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json(results)

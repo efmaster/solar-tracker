@@ -1,11 +1,13 @@
 'use client'
 
-import { format, getMonth, getYear } from 'date-fns'
-import { de } from 'date-fns/locale'
+import { format } from 'date-fns'
+import { useCurrentLocale } from '@/lib/locale-provider'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslations } from '@/lib/use-translations'
+import { getDateFnsLocale } from '@/lib/i18n'
 import { type DayData } from '@/components/energy-dashboard-types'
 
 interface EnergyDashboardCalendarProps {
@@ -33,29 +35,36 @@ export function EnergyDashboardCalendar({
   currentYear,
   setCurrentDate,
 }: EnergyDashboardCalendarProps) {
+  const locale = useCurrentLocale()
+  const t = useTranslations()
+  const dateFnsLocale = getDateFnsLocale(locale)
+  const weekDays = Array.from({ length: 7 }, (_, index) =>
+    format(new Date(2024, 0, 1 + index), 'EE', { locale: dateFnsLocale })
+  )
+
   return (
     <>
       <Card className="lg:col-span-1">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <Button aria-label="Vorheriger Monat" variant="ghost" size="icon" onClick={() => changeMonth(-1)}>
+            <Button aria-label={t.buttons.previousMonth} variant="ghost" size="icon" onClick={() => changeMonth(-1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <button
-              aria-label="Jahr auswählen"
+              aria-label={t.ui.yearSelectTitle}
               onClick={() => setYearSelectorOpen(true)}
               className="text-lg font-semibold hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
             >
-              {format(currentDate, 'MMMM yyyy', { locale: de })}
+              {format(currentDate, 'MMMM yyyy', { locale: dateFnsLocale })}
             </button>
-            <Button aria-label="Nächster Monat" variant="ghost" size="icon" onClick={() => changeMonth(1)}>
+            <Button aria-label={t.buttons.nextMonth} variant="ghost" size="icon" onClick={() => changeMonth(1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-7 gap-1">
-            {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day) => (
+            {weekDays.map((day) => (
               <div key={day} className="text-center text-xs font-semibold text-gray-600 dark:text-gray-400 pb-1">
                 {day}
               </div>
@@ -81,7 +90,7 @@ export function EnergyDashboardCalendar({
                         : d.color
                     } ${isUnusual ? 'ring-2 ring-red-500 dark:ring-red-400' : ''} dark:opacity-90 hover:scale-110 hover:shadow-md hover:z-10 active:scale-95 touch-manipulation flex flex-col items-center justify-center relative`
                   }
-                  title={isMissing ? 'Keine Daten' : isUnusual ? 'Ungewöhnlicher Wert!' : ''}
+                  title={isMissing ? t.ui.noData : isUnusual ? t.ui.unusualValue : ''}
                 >
                   <div className={`font-bold ${isMissing ? 'text-gray-500 dark:text-gray-400' : 'text-gray-700 dark:text-gray-900'}`}>
                     {d.day}
@@ -98,34 +107,34 @@ export function EnergyDashboardCalendar({
           </div>
           <div className="mt-4 space-y-2">
             <div className="flex flex-wrap items-center gap-2 text-xs dark:text-gray-300">
-              <span className="font-medium">Legende:</span>
+              <span className="font-medium">{t.ui.legend}:</span>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-red-200 rounded" />
-                <span>Niedrig</span>
+                <span>{t.ui.low}</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-orange-200 rounded" />
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-yellow-200 rounded" />
-                <span>Mittel</span>
+                <span>{t.ui.medium}</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-lime-200 rounded" />
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-green-300 rounded" />
-                <span>Hoch</span>
+                <span>{t.ui.high}</span>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs dark:text-gray-300">
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-gray-200 dark:bg-gray-700 border-2 border-dashed border-gray-400 rounded" />
-                <span>Fehlend</span>
+                <span>{t.ui.missing}</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-yellow-200 ring-2 ring-red-500 rounded" />
-                <span>Ungewöhnlich</span>
+                <span>{t.ui.unusual}</span>
               </div>
             </div>
           </div>
@@ -136,7 +145,7 @@ export function EnergyDashboardCalendar({
         <DialogContent>
           <DialogClose onClose={() => setYearSelectorOpen(false)} />
           <DialogHeader>
-            <DialogTitle>Jahr auswählen</DialogTitle>
+            <DialogTitle>{t.ui.yearSelectTitle}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {availableYears.map((year) => (

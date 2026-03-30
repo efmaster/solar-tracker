@@ -99,6 +99,23 @@ export const parseImportEntry = (entry: unknown, index: number): ParsedImportEnt
   return result
 }
 
+export const parseImportBody = (body: unknown): { data: unknown[] } | ValidationError => {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return { error: 'Ungültige Nutzlast. Erwartet ein Objekt mit dem Schlüssel data.' }
+  }
+
+  const payload = body as { data?: unknown }
+  if (!('data' in payload)) {
+    return { error: 'Feld data ist erforderlich.' }
+  }
+
+  if (!Array.isArray(payload.data)) {
+    return { error: 'Feld data muss ein Array sein.' }
+  }
+
+  return { data: payload.data }
+}
+
 export const parseYearMonthParams = (
   year: string | null,
   month: string | null

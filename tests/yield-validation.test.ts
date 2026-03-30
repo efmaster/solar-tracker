@@ -4,6 +4,7 @@ import {
   parseKwhValue,
   parseYieldBody,
   parseImportEntry,
+  parseImportBody,
   parseYearMonthParams,
 } from '../lib/yield-validation'
 
@@ -54,6 +55,24 @@ describe('yield validation', () => {
     if ('error' in result) {
       expect(result.error).toContain('Zeile 3:')
     }
+  })
+
+  it('validates import payload body', () => {
+    const result = parseImportBody({ data: [{ date: '01.01.2025', kwh: 3.5 }] })
+    expect('error' in result).toBe(false)
+    if (!('error' in result)) {
+      expect(result.data).toHaveLength(1)
+    }
+  })
+
+  it('rejects import payload with missing data field', () => {
+    const result = parseImportBody({})
+    expect(result).toHaveProperty('error')
+  })
+
+  it('rejects import payload when data is not an array', () => {
+    const result = parseImportBody({ data: 'invalid' })
+    expect(result).toHaveProperty('error')
   })
 
   it('parses year and month query parameters', () => {

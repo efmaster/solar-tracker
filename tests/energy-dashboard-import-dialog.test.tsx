@@ -4,6 +4,11 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EnergyDashboardImportDialog } from '../components/energy-dashboard-import-dialog'
 
+vi.mock('@/lib/locale-provider', () => ({
+  useCurrentLocale: () => 'de',
+  useLocale: () => ({ locale: 'de', setLocale: vi.fn(), toggleLocale: vi.fn() }),
+}))
+
 describe('EnergyDashboardImportDialog', () => {
   it('renders the dialog and shows import result details', () => {
     const setImportDialogOpen = vi.fn()

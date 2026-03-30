@@ -3,11 +3,22 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import EnergyDashboard from '../components/energy-dashboard-v2'
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => '/', // Gib hier den Pfad zurück, den der Test erwarten soll
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 vi.mock('@/components/theme-provider', () => ({
   useTheme: () => ({ theme: 'light', toggleTheme: vi.fn() }),
+}))
+
+vi.mock('@/lib/locale-provider', () => ({
+  useCurrentLocale: () => 'de',
+  useLocale: () => ({ locale: 'de', setLocale: vi.fn(), toggleLocale: vi.fn() }),
 }))
 
 const mockFetch = vi.fn()
@@ -43,7 +54,7 @@ describe('EnergyDashboard integration', () => {
     if (!dayElement) throw new Error('Day button not found')
     fireEvent.click(dayElement.closest('button')!)
 
-    const input = await screen.findByPlaceholderText('z.B. 25.5')
+    const input = await screen.findByPlaceholderText('25.5')
     fireEvent.change(input, { target: { value: '12.5' } })
 
     const saveButton = screen.getByRole('button', { name: 'Speichern' })
@@ -76,7 +87,10 @@ describe('EnergyDashboard integration', () => {
     if (!dayElement) throw new Error('Day button not found')
     fireEvent.click(dayElement.closest('button')!)
 
-    const deleteButton = await screen.findByRole('button', { name: /Löschen/i })
+    const input = await screen.findByDisplayValue('8')
+    expect(input).toBeInTheDocument()
+
+    const deleteButton = screen.getByRole('button', { name: 'Löschen' })
     fireEvent.click(deleteButton)
 
     await waitFor(() => {

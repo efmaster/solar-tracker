@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from '@/lib/use-translations'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface HeatmapDay {
@@ -19,6 +20,8 @@ interface EnergyDashboardHeatmapProps {
 }
 
 export function EnergyDashboardHeatmap({ showHeatmap, yearHeatmapData, currentYear }: EnergyDashboardHeatmapProps) {
+  const t = useTranslations()
+
   if (!showHeatmap) {
     return null
   }
@@ -26,7 +29,7 @@ export function EnergyDashboardHeatmap({ showHeatmap, yearHeatmapData, currentYe
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Jahres-Heatmap {currentYear}</CardTitle>
+        <CardTitle>{t.ui.heatmapTitle} {currentYear}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
@@ -40,7 +43,7 @@ export function EnergyDashboardHeatmap({ showHeatmap, yearHeatmapData, currentYe
                   <div
                     key={dayIdx}
                     className={`w-3 h-3 rounded-sm ${dayData.color} cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all`}
-                    title={`${dayData.date}: ${dayData.kwh !== null ? dayData.kwh.toFixed(2) + ' kWh' : 'Keine Daten'}`}
+                    title={`${dayData.date}: ${dayData.kwh !== null ? dayData.kwh.toFixed(2) + ' kWh' : t.ui.noData}`}
                   />
                 ))}
               </div>
@@ -48,28 +51,28 @@ export function EnergyDashboardHeatmap({ showHeatmap, yearHeatmapData, currentYe
           ))}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
-          <span className="font-medium">Legende:</span>
+          <span className="font-medium">{t.ui.legend}:</span>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-gray-100 dark:bg-gray-700 rounded-sm border border-gray-300 dark:border-gray-600" />
-            <span>Keine Daten</span>
+            <span>{t.ui.noData}</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-red-200 rounded-sm" />
-            <span>Niedrig</span>
+            <span>{t.ui.low}</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-orange-200 rounded-sm" />
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-yellow-200 rounded-sm" />
-            <span>Mittel</span>
+            <span>{t.ui.medium}</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-lime-200 rounded-sm" />
           </div>
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-green-300 rounded-sm" />
-            <span>Hoch</span>
+            <span>{t.ui.high}</span>
           </div>
         </div>
       </CardContent>

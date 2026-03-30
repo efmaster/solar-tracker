@@ -89,18 +89,17 @@ export default function EnergyDashboard() {
       setError(null)
       const response = await fetch(`/api/yields?year=${currentYear}`)
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
       const contentType = response.headers.get('content-type')
-      if (!contentType || !contentType.includes('application/json')) {
-        console.warn('API returned non-JSON response, initializing empty data')
+      const data = (contentType && contentType.includes('application/json'))
+        ? await response.json().catch(() => null)
+        : null
+
+      if (!response.ok) {
+        setError(data?.error || 'Fehler beim Laden der Daten. Bitte Seite neu laden.')
         setYields([])
         return
       }
-      
-      const data = await response.json()
+
       setYields(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching yields:', error)

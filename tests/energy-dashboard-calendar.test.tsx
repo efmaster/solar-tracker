@@ -4,6 +4,11 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EnergyDashboardCalendar } from '../components/energy-dashboard-calendar'
 
+vi.mock('@/lib/locale-provider', () => ({
+  useCurrentLocale: () => 'de',
+  useLocale: () => ({ locale: 'de', setLocale: vi.fn(), toggleLocale: vi.fn() }),
+}))
+
 describe('EnergyDashboardCalendar', () => {
   it('calls handleDayClick when a calendar day is clicked', () => {
     const handleDayClick = vi.fn()

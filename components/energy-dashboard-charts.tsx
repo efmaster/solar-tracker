@@ -1,6 +1,10 @@
 'use client'
 
+import { format } from 'date-fns'
+import { useCurrentLocale } from '@/lib/locale-provider'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { useTranslations } from '@/lib/use-translations'
+import { getDateFnsLocale } from '@/lib/i18n'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
@@ -29,23 +33,11 @@ interface EnergyDashboardChartsProps {
   dailyChartData: { tag: number; kwh: number }[]
 }
 
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string | number }) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { color?: string; name?: string; value?: number }[]; label?: string | number }) => {
+  const t = useTranslations()
+
   if (active && payload && payload.length) {
-    const monthNames: { [key: string]: string } = {
-      Jan: 'Januar',
-      Feb: 'Februar',
-      Mär: 'März',
-      Apr: 'April',
-      Mai: 'Mai',
-      Jun: 'Juni',
-      Jul: 'Juli',
-      Aug: 'August',
-      Sep: 'September',
-      Okt: 'Oktober',
-      Nov: 'November',
-      Dez: 'Dezember',
-    }
-    const displayLabel = monthNames[label as string] || (typeof label === 'number' ? `Tag: ${label}` : label)
+    const displayLabel = typeof label === 'number' ? `${t.ui.dayLabel}: ${label}` : label
 
     return (
       <div className="bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-blue-400 rounded-lg shadow-2xl p-4">
@@ -74,20 +66,27 @@ export function EnergyDashboardCharts({
   monthlyChartData,
   dailyChartData,
 }: EnergyDashboardChartsProps) {
+  const t = useTranslations()
+  const locale = useCurrentLocale()
+  const dateFnsLocale = getDateFnsLocale(locale)
+  const monthKeys = Array.from({ length: 12 }, (_, index) =>
+    format(new Date(currentYear, index, 1), 'MMMM', { locale: dateFnsLocale })
+  )
+
   return (
     <Card className="lg:col-span-2">
       <CardContent className="pt-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="yearly">Jahresübersicht</TabsTrigger>
-            <TabsTrigger value="monthly">Monatsertrag</TabsTrigger>
-            <TabsTrigger value="daily">Tagesertrag</TabsTrigger>
-            <TabsTrigger value="statistics">Statistik</TabsTrigger>
+            <TabsTrigger value="yearly">{t.ui.yearOverview}</TabsTrigger>
+            <TabsTrigger value="monthly">{t.ui.monthlyOverview}</TabsTrigger>
+            <TabsTrigger value="daily">{t.ui.dailyOverview}</TabsTrigger>
+            <TabsTrigger value="statistics">{t.ui.statistics}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="yearly" className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Jahresübersicht {currentYear} - Alle Monate
+              {t.ui.yearOverview} {currentYear} - {t.ui.monthlyComparison}
             </h3>
             <ResponsiveContainer width="100%" height={400}>
               <LineChart data={yearlyLineChartData}>
@@ -96,35 +95,45 @@ export function EnergyDashboardCharts({
                 <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ color: '#6b7280' }} />
-                <Line type="monotone" dataKey="Januar" stroke="#60a5fa" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="Februar" stroke="#a78bfa" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="März" stroke="#34d399" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="April" stroke="#f87171" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="Mai" stroke="#fb923c" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="Juni" stroke="#fbbf24" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="Juli" stroke="#4ade80" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="August" stroke="#22d3ee" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="September" stroke="#818cf8" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="Oktober" stroke="#fb7185" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="November" stroke="#f97316" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="Dezember" stroke="#3b82f6" strokeWidth={1.5} />
+                {monthKeys.map((monthKey, index) => (
+                  <Line
+                    key={monthKey}
+                    type="monotone"
+                    dataKey={monthKey}
+                    stroke={[
+                      '#60a5fa',
+                      '#a78bfa',
+                      '#34d399',
+                      '#f87171',
+                      '#fb923c',
+                      '#fbbf24',
+                      '#4ade80',
+                      '#22d3ee',
+                      '#818cf8',
+                      '#fb7185',
+                      '#f97316',
+                      '#3b82f6',
+                    ][index % 12]}
+                    strokeWidth={1.5}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           </TabsContent>
 
           <TabsContent value="statistics" className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Monatsstatistik {currentYear}
+              {t.ui.monthlyStatistics} {currentYear}
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b-2 border-gray-300 dark:border-gray-600">
-                    <th className="text-left p-2 font-semibold text-gray-900 dark:text-white">Monat</th>
-                    <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">Summe (kWh)</th>
-                    <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">Durchschnitt (kWh)</th>
-                    <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">Tage mit Daten</th>
-                    <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">Abdeckung</th>
+                    <th className="text-left p-2 font-semibold text-gray-900 dark:text-white">{t.ui.monthlyOverview}</th>
+                    <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">{t.chart.sum}</th>
+                    <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">{t.chart.average}</th>
+                    <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">{t.ui.daysWithData}</th>
+                    <th className="text-right p-2 font-semibold text-gray-900 dark:text-white">{t.ui.coverage}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -145,7 +154,7 @@ export function EnergyDashboardCharts({
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-gray-300 dark:border-gray-600 font-bold">
-                    <td className="p-2 text-gray-900 dark:text-white">Gesamt</td>
+                    <td className="p-2 text-gray-900 dark:text-white">{t.ui.total}</td>
                     <td className="p-2 text-right text-gray-900 dark:text-white">{monthlyStatistics.reduce((sum, s) => sum + s.total, 0).toFixed(2)}</td>
                     <td className="p-2 text-right text-gray-900 dark:text-white">{(monthlyStatistics.reduce((sum, s) => sum + s.total, 0) / Math.max(1, monthlyStatistics.reduce((sum, s) => sum + s.daysWithData, 0))).toFixed(2)}</td>
                     <td className="p-2 text-right text-gray-900 dark:text-white">{monthlyStatistics.reduce((sum, s) => sum + s.daysWithData, 0)}</td>
@@ -155,7 +164,7 @@ export function EnergyDashboardCharts({
               </table>
             </div>
             <div className="mt-6">
-              <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Monatsvergleich: Durchschnitt vs. Summe</h4>
+              <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">{t.ui.monthlyComparison}: {t.chart.average} vs. {t.chart.sum}</h4>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={monthlyStatistics}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
@@ -163,15 +172,15 @@ export function EnergyDashboardCharts({
                   <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ color: '#6b7280' }} />
-                  <Bar dataKey="total" fill="#3b82f6" name="Summe (kWh)" />
-                  <Bar dataKey="average" fill="#10b981" name="Durchschnitt (kWh)" />
+                  <Bar dataKey="total" fill="#3b82f6" name={t.chart.sum} />
+                  <Bar dataKey="average" fill="#10b981" name={t.chart.average} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </TabsContent>
 
           <TabsContent value="monthly" className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Monatsertrag {currentYear}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{t.ui.monthlyOverview} {currentYear}</h3>
             <ResponsiveContainer width="100%" height={400}>
               <BarChart data={monthlyChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
@@ -179,13 +188,15 @@ export function EnergyDashboardCharts({
                 <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ color: '#6b7280' }} />
-                <Bar dataKey="kwh" fill="#3b82f6" name="kWh" />
+                <Bar dataKey="kwh" fill="#3b82f6" name={t.chart.kwh} />
               </BarChart>
             </ResponsiveContainer>
           </TabsContent>
 
           <TabsContent value="daily" className="space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Tagesertrag - {currentMonth + 1}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              {t.ui.dailyOverview} - {format(new Date(currentYear, currentMonth, 1), 'MMMM', { locale: dateFnsLocale })}
+            </h3>
             <ResponsiveContainer width="100%" height={400}>
               <LineChart data={dailyChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
@@ -193,7 +204,7 @@ export function EnergyDashboardCharts({
                 <YAxis stroke="#6b7280" className="dark:stroke-gray-400" />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ color: '#6b7280' }} />
-                <Line type="monotone" dataKey="kwh" stroke="#3b82f6" strokeWidth={2} name="kWh" />
+                <Line type="monotone" dataKey="kwh" stroke="#3b82f6" strokeWidth={2} name={t.chart.kwh} />
               </LineChart>
             </ResponsiveContainer>
           </TabsContent>

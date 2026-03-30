@@ -1,6 +1,7 @@
 'use client'
 
 import { type ChangeEvent } from 'react'
+import { useTranslations } from '@/lib/use-translations'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog'
 import { type ImportResult } from '@/components/energy-dashboard-types'
@@ -22,20 +23,22 @@ export function EnergyDashboardImportDialog({
   importResult,
   setImportResult,
 }: EnergyDashboardImportDialogProps) {
+  const t = useTranslations()
+
   return (
     <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
       <DialogContent>
         <DialogClose onClose={() => { setImportDialogOpen(false); setImportResult(null) }} />
         <DialogHeader>
-          <DialogTitle>CSV Daten importieren</DialogTitle>
+          <DialogTitle>{t.ui.importDialogTitle}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-              Format: <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">DD.MM.YYYY,KWH</code>
+              {t.ui.importHint}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-500 mb-4">
-              Beispiel: 01.01.2017,25.5
+              {t.ui.exampleHint}
             </p>
             <input
               type="file"
@@ -49,23 +52,23 @@ export function EnergyDashboardImportDialog({
           {importing && (
             <div className="text-center py-4">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Importiere Daten...</p>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{t.ui.importing}</p>
             </div>
           )}
 
           {importResult && (
             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 space-y-2">
-              <h4 className="font-semibold text-gray-900 dark:text-white">Import Ergebnis:</h4>
+              <h4 className="font-semibold text-gray-900 dark:text-white">{t.ui.importResultTitle}:</h4>
               <div className="text-sm space-y-1">
-                <p className="text-green-600 dark:text-green-400">✓ {importResult.imported} neue Einträge importiert</p>
-                <p className="text-blue-600 dark:text-blue-400">↻ {importResult.updated} Einträge aktualisiert</p>
+                <p className="text-green-600 dark:text-green-400">✓ {importResult.imported} {t.ui.importedEntries}</p>
+                <p className="text-blue-600 dark:text-blue-400">↻ {importResult.updated} {t.ui.updatedEntries}</p>
                 {importResult.errors > 0 && (
-                  <p className="text-red-600 dark:text-red-400">✗ {importResult.errors} Fehler</p>
+                  <p className="text-red-600 dark:text-red-400">✗ {importResult.errors} {t.ui.importErrors}</p>
                 )}
               </div>
               {importResult.errorDetails.length > 0 && (
                 <details className="mt-2">
-                  <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer">Fehlerdetails anzeigen</summary>
+                  <summary className="text-xs text-gray-600 dark:text-gray-400 cursor-pointer">{t.ui.showErrorDetails}</summary>
                   <div className="mt-2 text-xs text-red-600 dark:text-red-400 max-h-32 overflow-y-auto">
                     {importResult.errorDetails.map((error, i) => (
                       <div key={i}>{error}</div>
@@ -82,7 +85,7 @@ export function EnergyDashboardImportDialog({
               onClick={() => { setImportDialogOpen(false); setImportResult(null) }}
               className="flex-1"
             >
-              Schließen
+              {t.ui.close}
             </Button>
           </div>
         </div>
