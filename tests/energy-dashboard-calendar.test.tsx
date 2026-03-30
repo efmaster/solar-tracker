@@ -1,5 +1,3 @@
-/// <reference types="vitest" />
-
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { EnergyDashboardCalendar } from '../components/energy-dashboard-calendar'

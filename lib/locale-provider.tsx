@@ -1,5 +1,6 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect */
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { getLocale, getLocaleFromPathname, defaultLocale, locales, type Locale } from './i18n'

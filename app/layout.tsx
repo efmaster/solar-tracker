@@ -4,7 +4,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { LocaleProvider } from "@/lib/locale-provider";
 import PWARegister from "@/components/pwa-register";
-import { translations, getLocale } from "@/lib/i18n";
+import { translations } from "@/lib/i18n";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

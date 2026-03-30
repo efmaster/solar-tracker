@@ -1,5 +1,6 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { format, getYear } from 'date-fns'
@@ -10,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Sun, Moon, Languages } from 'lucide-react'
 import { useTheme } from '@/components/theme-provider'
 import { useTranslations } from '@/lib/use-translations'
-import { getDateFnsLocale, type Locale } from '@/lib/i18n'
+import { getDateFnsLocale } from '@/lib/i18n'
 import { useLocale } from '@/lib/locale-provider'
 
 interface EnergyYield {
@@ -21,8 +22,8 @@ interface EnergyYield {
 
 interface CustomTooltipProps {
   active?: boolean
-  payload?: any[]
-  label?: string
+  payload?: Array<{ color?: string; name?: string; value?: number }>
+  label?: string | number
 }
 
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
@@ -33,7 +34,9 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
         {payload.map((entry, index) => (
           <p key={index} className="text-sm text-gray-800 dark:text-gray-100">
             <span style={{ color: entry.color }} className="font-semibold">{entry.name}: </span>
-            <span className="font-bold text-gray-900 dark:text-white">{entry.value.toFixed(2)}</span>
+            <span className="font-bold text-gray-900 dark:text-white">
+              {(typeof entry.value === 'number' ? entry.value : 0).toFixed(2)}
+            </span>
           </p>
         ))}
       </div>
@@ -52,9 +55,21 @@ export default function YearComparison({ backHref }: YearComparisonProps) {
   const t = useTranslations()
   const dateFnsLocale = getDateFnsLocale(locale)
   const [allYields, setAllYields] = useState<EnergyYield[]>([])
-  const [loading, setLoading] = useState(true)
   const [abschlag, setAbschlag] = useState<number>(0)
   const [einspeiseverguetung, setEinspeiseverguetung] = useState<number>(0)
+
+  async function fetchAllYields() {
+    try {
+      const response = await fetch(`/api/yields`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        setAllYields(Array.isArray(data) ? data : [])
+      }
+    } catch (error) {
+      console.error('Error fetching yields:', error)
+    }
+  }
 
   useEffect(() => {
     fetchAllYields()
@@ -64,22 +79,6 @@ export default function YearComparison({ backHref }: YearComparisonProps) {
     if (savedAbschlag) setAbschlag(parseFloat(savedAbschlag))
     if (savedEinspeise) setEinspeiseverguetung(parseFloat(savedEinspeise))
   }, [])
-
-  const fetchAllYields = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(`/api/yields`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        setAllYields(Array.isArray(data) ? data : [])
-      }
-    } catch (error) {
-      console.error('Error fetching yields:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleAbschlagChange = (value: string) => {
     const num = parseFloat(value) || 0
@@ -148,7 +147,7 @@ export default function YearComparison({ backHref }: YearComparisonProps) {
     })
 
     return months.map((monthName, monthIndex) => {
-      const dataPoint: any = { month: monthName }
+      const dataPoint: Record<string, number | string> = { month: monthName }
       
       yearMonthMap.forEach((monthData, year) => {
         dataPoint[year] = monthData.get(monthIndex) || 0

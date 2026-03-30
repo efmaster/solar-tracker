@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach, beforeAll, afterEach } from 'vitest'
+import type { NextRequest } from 'next/server'
 
 type MockPrisma = {
   energyYield: {
@@ -28,13 +29,13 @@ vi.mock('@/lib/prisma', () => {
   }
 })
 
-let GET: any
-let POST: any
-let DELETE: any
+let GET: typeof import('../../app/api/yields/route').GET
+let POST: typeof import('../../app/api/yields/route').POST
+let DELETE: typeof import('../../app/api/yields/route').DELETE
 let mockPrisma: MockPrisma
 
 beforeAll(async () => {
-  const route = await import('../../app/api/yields/route')
+  const route = (await import('../../app/api/yields/route')) as typeof import('../../app/api/yields/route')
   GET = route.GET
   POST = route.POST
   DELETE = route.DELETE
@@ -61,7 +62,8 @@ describe('GET /api/yields', () => {
       { id: 2, date: new Date('2025-03-02'), kwh: 8 },
     ])
 
-    const response = await GET({ nextUrl: new URL('http://localhost/') } as any)
+    const nextRequest = { nextUrl: new URL('http://localhost/') } as unknown as NextRequest
+    const response = await GET(nextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()
@@ -73,7 +75,8 @@ describe('GET /api/yields', () => {
   })
 
   it('returns 400 for invalid month filter', async () => {
-    const response = await GET({ nextUrl: new URL('http://localhost/?year=2025&month=13') } as any)
+    const nextRequest = { nextUrl: new URL('http://localhost/?year=2025&month=13') } as unknown as NextRequest
+    const response = await GET(nextRequest)
 
     expect(response.status).toBe(400)
     const json = await response.json()
@@ -90,9 +93,10 @@ describe('POST /api/yields', () => {
       method: 'POST',
       body: JSON.stringify({ date: '02.03.2025', kwh: 10 }),
       headers: { 'Content-Type': 'application/json' },
-    }) as unknown as Request
+    })
 
-    const response = await POST(request as any)
+    const nextRequest = request as unknown as NextRequest
+    const response = await POST(nextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()
@@ -108,9 +112,10 @@ describe('POST /api/yields', () => {
       method: 'POST',
       body: JSON.stringify({ date: '2025-03-02', kwh: 12 }),
       headers: { 'Content-Type': 'application/json' },
-    }) as unknown as Request
+    })
 
-    const response = await POST(request as any)
+    const nextRequest = request as unknown as NextRequest
+    const response = await POST(nextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()
@@ -121,7 +126,8 @@ describe('POST /api/yields', () => {
 
 describe('DELETE /api/yields', () => {
   it('returns 400 for invalid delete date', async () => {
-    const response = await DELETE({ nextUrl: new URL('http://localhost/?date=invalid') } as any)
+    const nextRequest = { nextUrl: new URL('http://localhost/?date=invalid') } as unknown as NextRequest
+    const response = await DELETE(nextRequest)
 
     expect(response.status).toBe(400)
     const json = await response.json()
@@ -131,7 +137,8 @@ describe('DELETE /api/yields', () => {
   it('deletes a yield with a valid date', async () => {
     mockPrisma.energyYield.delete.mockResolvedValue({ id: 1, date: new Date('2025-03-02'), kwh: 10 })
 
-    const response = await DELETE({ nextUrl: new URL('http://localhost/?date=02.03.2025') } as any)
+    const nextRequest = { nextUrl: new URL('http://localhost/?date=02.03.2025') } as unknown as NextRequest
+    const response = await DELETE(nextRequest)
 
     expect(response.status).toBe(200)
     const json = await response.json()

@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     let body: unknown
     try {
       body = await request.json()
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Ungültiges JSON im Request-Body' },
         { status: 400 }
@@ -36,25 +36,18 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const existingYield = await prisma.energyYield.findUnique({
+        const upserted = await prisma.energyYield.upsert({
           where: { date: parsed.date },
+          create: { date: parsed.date, kwh: parsed.kwh },
+          update: { kwh: parsed.kwh },
         })
 
-        if (existingYield) {
-          await prisma.energyYield.update({
-            where: { date: parsed.date },
-            data: { kwh: parsed.kwh },
-          })
-          results.updated++
-        } else {
-          await prisma.energyYield.create({
-            data: {
-              date: parsed.date,
-              kwh: parsed.kwh,
-            },
-          })
-          results.imported++
-        }
+        // Prisma sets `updatedAt` automatically for updates.
+        // On create, `createdAt` and `updatedAt` should be equal (same insert timestamp).
+        const createdAtMs = upserted.createdAt?.getTime?.() ?? 0
+        const updatedAtMs = upserted.updatedAt?.getTime?.() ?? 0
+        if (createdAtMs !== 0 && createdAtMs === updatedAtMs) results.imported++
+        else results.updated++
       } catch (error) {
         results.errors++
         results.errorDetails.push(`Error processing entry ${index + 1}: ${error}`)

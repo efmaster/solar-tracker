@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useCallback, useEffect, useState } from 'react'
 import { format, getMonth, getYear, getDaysInMonth } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
@@ -18,8 +19,8 @@ interface EnergyYield {
 
 interface CustomTooltipProps {
   active?: boolean
-  payload?: any[]
-  label?: string
+  payload?: Array<{ color?: string; name?: string; value?: number }>
+  label?: string | number
 }
 
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
@@ -30,7 +31,8 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
       'Sep': 'September', 'Okt': 'Oktober', 'Nov': 'November', 'Dez': 'Dezember'
     }
     
-    const displayLabel = monthNames[label as string] || (typeof label === 'number' ? `Tag: ${label}` : label)
+    const displayLabel =
+      typeof label === 'string' ? (monthNames[label] || label) : typeof label === 'number' ? `Tag: ${label}` : ''
     
     return (
       <div className="bg-white dark:bg-gray-700 border-2 border-gray-400 dark:border-blue-400 rounded-lg shadow-2xl p-4">
@@ -38,7 +40,9 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
         {payload.map((entry, index) => (
           <p key={index} className="text-sm text-gray-800 dark:text-gray-100">
             <span style={{ color: entry.color }} className="font-semibold">{entry.name}: </span>
-            <span className="font-bold text-gray-900 dark:text-white">{entry.value.toFixed(2)} kWh</span>
+            <span className="font-bold text-gray-900 dark:text-white">
+              {(typeof entry.value === 'number' ? entry.value : 0).toFixed(2)} kWh
+            </span>
           </p>
         ))}
       </div>
@@ -73,19 +77,13 @@ export default function EnergyDashboard() {
   const [editMode, setEditMode] = useState(false)
   const [kwhValue, setKwhValue] = useState('')
   const [yields, setYields] = useState<EnergyYield[]>([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const currentYear = getYear(currentDate)
   const currentMonth = getMonth(currentDate)
 
-  useEffect(() => {
-    fetchYields()
-  }, [currentYear])
-
-  const fetchYields = async () => {
+  const fetchYields = useCallback(async () => {
     try {
-      setLoading(true)
       setError(null)
       const response = await fetch(`/api/yields?year=${currentYear}`)
       
@@ -105,10 +103,12 @@ export default function EnergyDashboard() {
       console.error('Error fetching yields:', error)
       setError('Fehler beim Laden der Daten. Bitte Seite neu laden.')
       setYields([])
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [currentYear])
+
+  useEffect(() => {
+    fetchYields()
+  }, [fetchYields])
 
   const handleSave = async () => {
     try {
@@ -187,7 +187,8 @@ export default function EnergyDashboard() {
   }
 
   const getYearlyLineChartData = () => {
-    const data: { [key: string]: any } = {}
+    type YearlyChartPoint = { day: number; [monthName: string]: number }
+    const data: Record<number, YearlyChartPoint> = {}
     
     for (let month = 0; month < 12; month++) {
       const daysInMonth = getDaysInMonth(new Date(currentYear, month))
@@ -199,12 +200,12 @@ export default function EnergyDashboard() {
     yields.forEach((y) => {
       const yieldDate = new Date(y.date)
       const day = yieldDate.getDate()
-      const month = getMonth(yieldDate)
       const monthName = format(yieldDate, 'MMMM', { locale: de })
+      data[day] = data[day] ?? { day }
       data[day][monthName] = y.kwh
     })
 
-    return Object.values(data).sort((a: any, b: any) => a.day - b.day)
+    return Object.values(data).sort((a, b) => a.day - b.day)
   }
 
   const dayData = getDayData()

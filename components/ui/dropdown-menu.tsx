@@ -1,7 +1,6 @@
 'use client'
 
 import * as React from "react"
-import { cn } from "@/lib/utils"
 
 interface DropdownMenuProps {
   children: React.ReactNode
@@ -9,12 +8,14 @@ interface DropdownMenuProps {
 
 export const DropdownMenu = ({ children }: DropdownMenuProps) => {
   const [open, setOpen] = React.useState(false)
+  const setOpenProp = setOpen as unknown as (open: boolean) => void
 
   return (
     <div className="relative inline-block">
       {React.Children.map(children, child => {
         if (React.isValidElement(child)) {
-          return React.cloneElement(child as React.ReactElement<any>, { open, setOpen })
+          type InjectedProps = { open: boolean; setOpen: (open: boolean) => void }
+          return React.cloneElement(child as React.ReactElement<InjectedProps>, { open, setOpen: setOpenProp })
         }
         return child
       })}
