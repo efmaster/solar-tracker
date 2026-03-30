@@ -16,25 +16,20 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export function generateMetadata({ params }: RootLayoutProps): Metadata {
-  const locale = getLocale(params.locale)
-  return {
-    title: translations[locale].appTitle,
-    description: translations[locale].appDescription,
-    manifest: '/manifest.json',
-  }
+export const metadata: Metadata = {
+  title: translations.de.appTitle,
+  description: translations.de.appDescription,
+  manifest: '/manifest.json',
 }
 
 interface RootLayoutProps {
   children: React.ReactNode
-  params: { locale: string }
 }
 
 export default function RootLayout({
   children,
-  params,
 }: Readonly<RootLayoutProps>) {
-  const lang = params.locale || 'de'
+  const lang = 'de'
   return (
     <html
       lang={lang}
